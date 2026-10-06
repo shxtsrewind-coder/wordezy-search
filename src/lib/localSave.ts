@@ -1,28 +1,39 @@
-// Local-only save for this first pass — no backend yet (Wordezy's Supabase
-// pattern is the natural next step: daily streak synced across devices,
-// real purchase verification for Classic Unlimited). For now, progress and
-// the unlock flag live in this browser only.
+// Local save. Streak and the unlock flag are inherently per-device for now
+// (Wordezy's Supabase pattern is the natural next step for those). The
+// leaderboard is different: scores are already synced server-side
+// (lib/leaderboard.ts), so playerId/displayName here are just this
+// browser's anonymous identity, not the record of anything.
 const KEY = "wordezySearch.save.v1";
 
 export interface SaveData {
   lastSolvedDate: string | null;
   streak: number;
   unlockedUnlimited: boolean;
+  /** Anonymous, per-browser identity used to attribute leaderboard scores. */
+  playerId: string;
+  displayName: string | null;
 }
 
-const DEFAULTS: SaveData = {
+function newPlayerId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const DEFAULTS: Omit<SaveData, "playerId"> = {
   lastSolvedDate: null,
   streak: 0,
   unlockedUnlimited: false,
+  displayName: null,
 };
 
 function read(): SaveData {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULTS };
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    const data: SaveData = raw ? { ...DEFAULTS, playerId: newPlayerId(), ...JSON.parse(raw) } : { ...DEFAULTS, playerId: newPlayerId() };
+    if (!raw) write(data); // persist the freshly-minted playerId immediately
+    return data;
   } catch {
-    return { ...DEFAULTS };
+    return { ...DEFAULTS, playerId: newPlayerId() };
   }
 }
 
@@ -53,6 +64,13 @@ export const localSave = {
   setUnlocked(value: boolean): SaveData {
     const data = read();
     data.unlockedUnlimited = value;
+    write(data);
+    return data;
+  },
+
+  setDisplayName(name: string): SaveData {
+    const data = read();
+    data.displayName = name.trim().slice(0, 20) || null;
     write(data);
     return data;
   },

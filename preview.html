@@ -54,6 +54,8 @@
     justify-content: space-between;
   }
   .brand { display: flex; align-items: center; gap: 10px; }
+  .header-right { display: flex; align-items: center; gap: 14px; }
+  .timer { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--paper); opacity: 0.85; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
   .tiles { display: flex; align-items: center; gap: 4px; }
   .tile {
     width: 24px; height: 24px; border-radius: 4px;
@@ -123,6 +125,43 @@
     color: var(--muted); font-size: 14px; font-family: var(--font-body); transition: color .15s;
   }
   .new-puzzle-btn:hover { color: var(--paper); }
+  .leaderboard {
+    width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 12px; padding: 14px 16px;
+  }
+  .leaderboard-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--present); margin-bottom: 8px; }
+  .leaderboard-empty { font-size: 13px; color: var(--muted); margin: 0; }
+  .leaderboard-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+  .leaderboard-row {
+    display: flex; align-items: center; justify-content: space-between; font-family: var(--font-mono);
+    font-size: 13px; padding: 5px 8px; border-radius: 6px; color: rgba(243,239,230,0.8); font-variant-numeric: tabular-nums;
+  }
+  .leaderboard-row.you { background: var(--correct-soft); color: var(--correct); }
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(11,10,8,0.8); display: flex; align-items: center;
+    justify-content: center; padding: 16px; z-index: 10;
+  }
+  .modal {
+    width: 100%; max-width: 320px; background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .modal h2 { font-family: var(--font-display); font-weight: 600; font-size: 16px; margin: 0; }
+  .modal p { font-size: 14px; color: var(--muted); margin: 0; }
+  .modal input {
+    width: 100%; padding: 9px 12px; border-radius: 8px; background: var(--ink); border: 1px solid var(--rule);
+    color: var(--paper); font-family: var(--font-mono); font-size: 14px;
+  }
+  .modal input:focus { outline: none; border-color: var(--correct); }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-skip, .modal-save {
+    flex: 1; padding: 9px 12px; border-radius: 8px; border: none; font-size: 14px; font-weight: 500;
+    cursor: pointer; font-family: var(--font-body); transition: opacity .15s, background-color .15s;
+  }
+  .modal-skip { background: none; color: var(--muted); }
+  .modal-skip:hover { color: var(--paper); }
+  .modal-save { background: var(--correct); color: var(--paper); }
+  .modal-save:hover { background: var(--correct-dim); }
+  .modal-save:disabled { opacity: 0.4; cursor: default; }
   @media (max-width: 460px) {
     .board-row { flex-direction: column; align-items: center; }
     .word-rail { max-width: 320px; grid-template-columns: repeat(2, minmax(0,1fr)); }
@@ -166,7 +205,15 @@ function makeRng(seedStr) {
 }
 
 /* ---------------- wordsearch.ts ---------------- */
-const DIRECTIONS = [[0,1],[1,0],[1,1],[1,-1],[0,-1],[-1,0],[-1,-1],[-1,1]];
+const STRAIGHT_DIRECTIONS = [[0,1],[1,0],[0,-1],[-1,0]];
+const DIAGONAL_DIRECTIONS = [[1,1],[1,-1],[-1,-1],[-1,1]];
+const DIFFICULTY_TUNING = { easy: { diagonalWeight: 1 }, classic: { diagonalWeight: 2.5 }, hard: { diagonalWeight: 4 } };
+function directionBag(rng, tuning) {
+  const bag = [...STRAIGHT_DIRECTIONS];
+  const diagonalCopies = Math.max(1, Math.round(tuning.diagonalWeight));
+  for (let i = 0; i < diagonalCopies; i++) bag.push(...DIAGONAL_DIRECTIONS);
+  return bag.sort(() => rng() - 0.5);
+}
 const LETTER_WEIGHTS = [["e",12.7],["t",9.1],["a",8.2],["o",7.5],["i",7.0],["n",6.7],["s",6.3],["h",6.1],["r",6.0],["d",4.3],["l",4.0],["c",2.8],["u",2.8],["m",2.4],["w",2.4],["f",2.2],["g",2.0],["y",2.0],["p",1.9],["b",1.5],["v",1.0],["k",0.8],["j",0.15],["x",0.15],["q",0.1],["z",0.07]];
 const LETTER_TABLE = LETTER_WEIGHTS.flatMap(([ch, w]) => Array(Math.round(w * 4)).fill(ch));
 function randomLetter(rng) { return LETTER_TABLE[Math.floor(rng() * LETTER_TABLE.length)].toUpperCase(); }
@@ -182,15 +229,16 @@ function fits(grid, size, word, row, col, dRow, dCol) {
 function place(grid, word, row, col, dRow, dCol) {
   for (let i = 0; i < word.length; i++) grid[row + dRow * i][col + dCol * i] = word[i];
 }
-function generatePuzzle(words, size, seed) {
+function generatePuzzle(words, size, seed, difficulty = "classic") {
   const rng = makeRng(seed);
+  const tuning = DIFFICULTY_TUNING[difficulty];
   const upper = words.map((w) => w.toUpperCase().replace(/[^A-Z]/g, ""));
   const ordered = [...upper].sort((a, b) => b.length - a.length);
   const grid = Array.from({ length: size }, () => Array(size).fill(null));
   const placed = [];
   for (const word of ordered) {
     if (word.length > size) continue;
-    const dirOrder = [...DIRECTIONS].sort(() => rng() - 0.5);
+    const dirOrder = directionBag(rng, tuning);
     let done = false;
     for (let attempt = 0; attempt < 200 && !done; attempt++) {
       const dir = dirOrder[attempt % dirOrder.length];
@@ -205,9 +253,10 @@ function generatePuzzle(words, size, seed) {
   const filled = grid.map((row) => row.map((cell) => cell ?? randomLetter(rng)));
   return { size, grid: filled, words: placed };
 }
-function sizeForWords(words) {
+function sizeForWords(words, difficulty = "classic") {
+  const density = { easy: 2.2, classic: 1.8, hard: 1.5 };
   const longest = Math.max(...words.map((w) => w.length));
-  const base = Math.ceil(Math.sqrt(words.reduce((sum, w) => sum + w.length, 0) * 1.8));
+  const base = Math.ceil(Math.sqrt(words.reduce((sum, w) => sum + w.length, 0) * density[difficulty]));
   return Math.max(longest + 1, base, 10);
 }
 function matchSelection(selection, puzzle) {
@@ -240,7 +289,8 @@ const THEMES = [
 function themeById(id) { return THEMES.find((t) => t.id === id); }
 
 /* ---------------- lib/puzzleOfTheDay.ts ---------------- */
-const WORDS_PER_PUZZLE = 8;
+const WORDS_PER_PUZZLE = 12;
+const DAILY_DIFFICULTY = "hard"; // the leaderboard-ranked puzzle is the same for everyone, and hard
 function todayUtc() { return new Date().toISOString().slice(0, 10); }
 function pickWords(allWords, count, rng) {
   const pool = [...allWords];
@@ -255,17 +305,17 @@ function getDailyPuzzle(date = todayUtc()) {
   const rng = makeRng(`daily:${date}`);
   const theme = THEMES[Math.floor(rng() * THEMES.length)];
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
-  const size = sizeForWords(words);
-  const puzzle = generatePuzzle(words, size, `daily:${date}`);
+  const size = sizeForWords(words, DAILY_DIFFICULTY);
+  const puzzle = generatePuzzle(words, size, `daily:${date}`, DAILY_DIFFICULTY);
   return { date, themeLabel: theme.label, puzzle };
 }
-function getRandomPuzzle(themeId) {
+function getRandomPuzzle(themeId, difficulty = "hard") {
   const theme = themeId ? themeById(themeId) : THEMES[Math.floor(Math.random() * THEMES.length)];
   const seed = `random:${Date.now()}:${Math.random()}`;
   const rng = makeRng(seed);
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
-  const size = sizeForWords(words);
-  const puzzle = generatePuzzle(words, size, seed);
+  const size = sizeForWords(words, difficulty);
+  const puzzle = generatePuzzle(words, size, seed, difficulty);
   return { date: seed, themeLabel: theme.label, puzzle };
 }
 
@@ -275,9 +325,9 @@ const localSave = {
   get() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) return { streak: 0, lastWinDate: null, unlockedUnlimited: false, displayName: null, ...JSON.parse(raw) };
     } catch (e) {}
-    return { streak: 0, lastWinDate: null, unlockedUnlimited: false };
+    return { streak: 0, lastWinDate: null, unlockedUnlimited: false, displayName: null };
   },
   set(save) {
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
@@ -298,6 +348,10 @@ const localSave = {
     const save = this.get();
     return this.set({ ...save, unlockedUnlimited: value });
   },
+  setDisplayName(name) {
+    const save = this.get();
+    return this.set({ ...save, displayName: name.trim().slice(0, 20) || null });
+  },
 };
 
 /* ---------------- icons (inline, stand in for lucide-react) ---------------- */
@@ -311,6 +365,86 @@ const SparklesIcon = (p) => <Icon {...p} path={<><path d="M12 3v4M12 17v4M3 12h4
 const RefreshIcon = (p) => <Icon {...p} path={<><path d="M3 12a9 9 0 0 1 15.5-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.4L3 16"/><path d="M3 21v-5h5"/></>} />;
 const FlameIcon = (p) => <Icon {...p} path={<path d="M8.5 14.5A4.5 4.5 0 0 0 13 19a4.5 4.5 0 0 0 4.5-4.5c0-2-1.2-3-2-4.5-.6 1-1.5 1.5-2 1-1-1 .5-3-1-5-1 2.5-3.5 3-4.5 5.5-.4 1-.5 2-.5 3z"/>} />;
 const CheckIcon = (p) => <Icon {...p} path={<path d="M20 6 9 17l-5-5"/>} />;
+const TimerIcon = (p) => <Icon {...p} path={<><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6M12 2v3"/></>} />;
+const TrophyIcon = (p) => <Icon {...p} path={<><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 5H4a1 1 0 0 0-1 1 5 5 0 0 0 4 4.9M17 5h3a1 1 0 0 1 1 1 5 5 0 0 1-4 4.9"/></>} />;
+
+/* ---------------- hooks/useTimer.ts ---------------- */
+function formatTime(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+function useTimer(resetKey, running) {
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const startRef = useRef(Date.now());
+  React.useEffect(() => { startRef.current = Date.now(); setElapsedMs(0); }, [resetKey]);
+  React.useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setElapsedMs(Date.now() - startRef.current), 250);
+    return () => clearInterval(id);
+  }, [running, resetKey]);
+  return elapsedMs;
+}
+
+/* ---------------- components/Leaderboard.tsx ----------------
+   Backed by this artifact's own shared `db` — a live, cross-viewer demo of
+   the daily leaderboard. The real site (built from the Vite/React source)
+   talks to a Supabase table instead; same shape, different transport. */
+function Leaderboard({ date, refreshKey }) {
+  const [entries, setEntries] = useState(null);
+  const [selfId, setSelfId] = useState(null);
+  const [available, setAvailable] = useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!window.claude?.use) { setAvailable(false); return; }
+      const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+      if (!db || !user) { setAvailable(false); return; }
+      const id = await user.id();
+      if (cancelled) return;
+      setSelfId(id);
+      try {
+        const snap = await db.collection("scores").where("date", "==", date).orderBy("timeMs", "asc").limit(10).get();
+        if (!cancelled) setEntries(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (e) {
+        if (!cancelled) setAvailable(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [date, refreshKey]);
+
+  if (!available || entries === null) return null;
+
+  return (
+    <div className="leaderboard">
+      <div className="leaderboard-title"><TrophyIcon size={16} /> Today's fastest</div>
+      {entries.length === 0 ? (
+        <p className="leaderboard-empty">No times yet today — be the first.</p>
+      ) : (
+        <ol className="leaderboard-list">
+          {entries.map((e, i) => (
+            <li key={e.id} className={`leaderboard-row ${e.id === selfId ? "you" : ""}`}>
+              <span>{i + 1}. {e.displayName}{e.id === selfId ? " (you)" : ""}</span>
+              <span>{formatTime(e.timeMs)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+async function submitDailyScore(date, displayName, timeMs) {
+  if (!window.claude?.use) return false;
+  const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+  if (!db || !user) return false;
+  const id = await user.id();
+  if (!id) return false;
+  await db.doc("scores/" + id).set({ displayName, date, timeMs, updatedAt: Date.now() });
+  return true;
+}
 
 /* ---------------- components/Grid.tsx ---------------- */
 function pathBetween(from, to) {
@@ -418,16 +552,40 @@ function GamePage() {
   const [unlimited, setUnlimited] = useState(() => getRandomPuzzle());
   const [foundDaily, setFoundDaily] = useState(() => new Set());
   const [foundUnlimited, setFoundUnlimited] = useState(() => new Set());
+  const [namePrompt, setNamePrompt] = useState({ open: false, timeMs: 0, draft: "" });
+  const [leaderboardKey, setLeaderboardKey] = useState(0);
+  const [scoreStatus, setScoreStatus] = useState("idle");
 
   const active = mode === "daily" ? daily : unlimited;
   const found = mode === "daily" ? foundDaily : foundUnlimited;
   const setFound = mode === "daily" ? setFoundDaily : setFoundUnlimited;
   const isComplete = found.size === active.puzzle.words.length && active.puzzle.words.length > 0;
+  const timerMs = useTimer(`${mode}:${active.date}`, !isComplete);
+
+  const trySubmit = async (timeMs, displayName) => {
+    setScoreStatus("saving");
+    const ok = await submitDailyScore(daily.date, displayName, timeMs).catch(() => false);
+    if (ok) { setScoreStatus("saved"); setLeaderboardKey((k) => k + 1); }
+    else setScoreStatus("failed");
+  };
 
   const handleWordFound = (word) => {
     const next = new Set(found); next.add(word); setFound(next);
-    if (mode === "daily" && next.size === daily.puzzle.words.length) setSave(localSave.recordDailyWin(todayUtc()));
+    if (mode === "daily" && next.size === daily.puzzle.words.length) {
+      setSave(localSave.recordDailyWin(todayUtc()));
+      if (save.displayName) trySubmit(timerMs, save.displayName);
+      else setNamePrompt({ open: true, timeMs, draft: "" });
+    }
   };
+
+  const confirmName = () => {
+    const name = namePrompt.draft.trim().slice(0, 20);
+    if (!name) return;
+    setSave(localSave.setDisplayName(name));
+    setNamePrompt({ open: false, timeMs: 0, draft: "" });
+    trySubmit(namePrompt.timeMs, name);
+  };
+
   const newUnlimitedPuzzle = () => { setUnlimited(getRandomPuzzle()); setFoundUnlimited(new Set()); };
   const handleUnlock = () => alert("Payments aren't set up yet — Classic Unlimited will unlock for $2 once that's wired in.");
   const locked = mode === "unlimited" && !save.unlockedUnlimited;
@@ -436,7 +594,10 @@ function GamePage() {
     <div className="screen">
       <header className="header">
         <div className="brand"><WordmarkTiles /><h1>Wordezy Search</h1></div>
-        {save.streak > 0 && <div className="streak"><FlameIcon size={16} />{save.streak}</div>}
+        <div className="header-right">
+          {!locked && <div className="timer"><TimerIcon size={16} />{formatTime(timerMs)}</div>}
+          {save.streak > 0 && <div className="streak"><FlameIcon size={16} />{save.streak}</div>}
+        </div>
       </header>
 
       <div className="modes">
@@ -460,7 +621,12 @@ function GamePage() {
         <>
           <div style={{ textAlign: "center" }}>
             <p className="theme-label">{active.themeLabel}</p>
-            {isComplete && <p className="complete-msg">All found! Nice work.</p>}
+            {isComplete && (
+              <p className="complete-msg">
+                Solved in {formatTime(timerMs)}
+                {mode === "daily" && scoreStatus === "failed" ? " — saved locally only" : ""}
+              </p>
+            )}
           </div>
           <div className="board-row">
             <Grid puzzle={active.puzzle} foundWords={found} onWordFound={handleWordFound} />
@@ -471,7 +637,30 @@ function GamePage() {
               <RefreshIcon size={14} /> New puzzle
             </button>
           )}
+          {mode === "daily" && <Leaderboard date={daily.date} refreshKey={leaderboardKey} />}
         </>
+      )}
+
+      {namePrompt.open && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <h2>Solved in {formatTime(namePrompt.timeMs)}!</h2>
+            <p>Pick a name for today's leaderboard.</p>
+            <input
+              type="text"
+              autoFocus
+              maxLength={20}
+              value={namePrompt.draft}
+              onChange={(e) => setNamePrompt((p) => ({ ...p, draft: e.target.value }))}
+              onKeyDown={(e) => e.key === "Enter" && confirmName()}
+              placeholder="Your name"
+            />
+            <div className="modal-actions">
+              <button type="button" className="modal-skip" onClick={() => setNamePrompt({ open: false, timeMs: 0, draft: "" })}>Skip</button>
+              <button type="button" className="modal-save" disabled={!namePrompt.draft.trim()} onClick={confirmName}>Save score</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

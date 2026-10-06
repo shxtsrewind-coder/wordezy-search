@@ -1,9 +1,12 @@
-import React, { useMemo, useState } from "react";
-import { Lock, Sparkles, RefreshCw, Flame } from "lucide-react";
+import React, { useState } from "react";
+import { Lock, Sparkles, RefreshCw, Flame, Timer as TimerIcon } from "lucide-react";
 import { Grid } from "../components/Grid.tsx";
 import { WordList } from "../components/WordList.tsx";
+import { Leaderboard } from "../components/Leaderboard.tsx";
 import { getDailyPuzzle, getRandomPuzzle, todayUtc } from "../lib/puzzleOfTheDay.ts";
 import { localSave } from "../lib/localSave.ts";
+import { submitScore } from "../lib/leaderboard.ts";
+import { useTimer, formatTime } from "../hooks/useTimer.ts";
 
 type Mode = "daily" | "unlimited";
 
@@ -29,11 +32,30 @@ export const GamePage: React.FC = () => {
   const [unlimited, setUnlimited] = useState(() => getRandomPuzzle());
   const [foundDaily, setFoundDaily] = useState<Set<string>>(new Set());
   const [foundUnlimited, setFoundUnlimited] = useState<Set<string>>(new Set());
+  const [namePrompt, setNamePrompt] = useState<{ open: boolean; timeMs: number; draft: string }>({
+    open: false,
+    timeMs: 0,
+    draft: "",
+  });
+  const [leaderboardKey, setLeaderboardKey] = useState(0);
+  const [scoreStatus, setScoreStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
 
   const active = mode === "daily" ? daily : unlimited;
   const found = mode === "daily" ? foundDaily : foundUnlimited;
   const setFound = mode === "daily" ? setFoundDaily : setFoundUnlimited;
   const isComplete = found.size === active.puzzle.words.length && active.puzzle.words.length > 0;
+  const timerMs = useTimer(`${mode}:${active.date}`, !isComplete);
+
+  const submitDailyScore = async (timeMs: number, displayName: string) => {
+    setScoreStatus("saving");
+    try {
+      await submitScore({ playerId: save.playerId, displayName, puzzleDate: daily.date, timeMs });
+      setScoreStatus("saved");
+      setLeaderboardKey((k) => k + 1);
+    } catch {
+      setScoreStatus("failed"); // leaderboard backend unreachable — streak/solve still counted locally
+    }
+  };
 
   const handleWordFound = (word: string) => {
     const next = new Set(found);
@@ -41,7 +63,21 @@ export const GamePage: React.FC = () => {
     setFound(next);
     if (mode === "daily" && next.size === daily.puzzle.words.length) {
       setSave(localSave.recordDailyWin(todayUtc()));
+      if (save.displayName) {
+        submitDailyScore(timerMs, save.displayName);
+      } else {
+        setNamePrompt({ open: true, timeMs, draft: "" });
+      }
     }
+  };
+
+  const confirmName = () => {
+    const name = namePrompt.draft.trim().slice(0, 20);
+    if (!name) return;
+    const updated = localSave.setDisplayName(name);
+    setSave(updated);
+    setNamePrompt({ open: false, timeMs: 0, draft: "" });
+    submitDailyScore(namePrompt.timeMs, name);
   };
 
   const newUnlimitedPuzzle = () => {
@@ -64,12 +100,20 @@ export const GamePage: React.FC = () => {
           <WordmarkTiles />
           <h1 className="font-display font-semibold text-lg">Wordezy Search</h1>
         </div>
-        {save.streak > 0 && (
-          <div className="flex items-center gap-1.5 text-sm text-present font-mono">
-            <Flame className="w-4 h-4" />
-            {save.streak}
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {!locked && (
+            <div className="flex items-center gap-1.5 text-sm text-paper/80 font-mono">
+              <TimerIcon className="w-4 h-4" />
+              {formatTime(timerMs)}
+            </div>
+          )}
+          {save.streak > 0 && (
+            <div className="flex items-center gap-1.5 text-sm text-present font-mono">
+              <Flame className="w-4 h-4" />
+              {save.streak}
+            </div>
+          )}
+        </div>
       </header>
 
       <div className="flex items-center gap-1 p-1 bg-surface border border-rule rounded-lg">
@@ -118,7 +162,10 @@ export const GamePage: React.FC = () => {
           <div className="text-center">
             <p className="text-xs font-mono text-muted uppercase tracking-wide">{active.themeLabel}</p>
             {isComplete && (
-              <p className="text-correct text-sm font-medium mt-1">All found! Nice work.</p>
+              <p className="text-correct text-sm font-medium mt-1">
+                Solved in {formatTime(timerMs)}
+                {mode === "daily" && scoreStatus === "failed" ? " — saved locally, leaderboard unreachable" : ""}
+              </p>
             )}
           </div>
 
@@ -139,7 +186,47 @@ export const GamePage: React.FC = () => {
               New puzzle
             </button>
           )}
+
+          {mode === "daily" && (
+            <Leaderboard date={daily.date} playerId={save.playerId} refreshKey={leaderboardKey} />
+          )}
         </>
+      )}
+
+      {namePrompt.open && (
+        <div className="fixed inset-0 bg-ink/80 flex items-center justify-center p-4 z-10">
+          <div className="w-full max-w-xs bg-surface border border-rule rounded-xl p-5 space-y-3">
+            <h2 className="font-display font-semibold text-base">Solved in {formatTime(namePrompt.timeMs)}!</h2>
+            <p className="text-sm text-muted">Pick a name for today's leaderboard.</p>
+            <input
+              type="text"
+              autoFocus
+              maxLength={20}
+              value={namePrompt.draft}
+              onChange={(e) => setNamePrompt((p) => ({ ...p, draft: e.target.value }))}
+              onKeyDown={(e) => e.key === "Enter" && confirmName()}
+              placeholder="Your name"
+              className="w-full px-3 py-2 rounded-md bg-ink border border-rule text-paper text-sm font-mono focus:outline-none focus:border-correct"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setNamePrompt({ open: false, timeMs: 0, draft: "" })}
+                className="flex-1 py-2 rounded-md text-sm text-muted hover:text-paper transition-colors"
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                onClick={confirmName}
+                disabled={!namePrompt.draft.trim()}
+                className="flex-1 py-2 rounded-md bg-correct hover:bg-correct-dim disabled:opacity-40 text-paper text-sm font-medium transition-colors"
+              >
+                Save score
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

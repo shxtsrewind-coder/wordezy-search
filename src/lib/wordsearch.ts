@@ -18,11 +18,41 @@ export interface Puzzle {
   words: PlacedWord[];
 }
 
-// 8 compass directions as (dRow, dCol) unit steps.
-const DIRECTIONS: Array<[number, number]> = [
-  [0, 1], [1, 0], [1, 1], [1, -1],
-  [0, -1], [-1, 0], [-1, -1], [-1, 1],
+// 8 compass directions as (dRow, dCol) unit steps, split by axis so callers
+// can weight how often diagonals get first crack at a placement slot.
+const STRAIGHT_DIRECTIONS: Array<[number, number]> = [
+  [0, 1], [1, 0], [0, -1], [-1, 0],
 ];
+const DIAGONAL_DIRECTIONS: Array<[number, number]> = [
+  [1, 1], [1, -1], [-1, -1], [-1, 1],
+];
+const DIRECTIONS: Array<[number, number]> = [...STRAIGHT_DIRECTIONS, ...DIAGONAL_DIRECTIONS];
+
+/** How hard the grid leans on diagonal/backward placements. */
+export type Difficulty = "easy" | "classic" | "hard";
+
+interface DifficultyTuning {
+  /** How many copies of the diagonal directions go into the shuffle bag,
+   *  per 1 copy of each straight direction — higher skews placement toward
+   *  diagonals. Every direction vector already reads in both senses (e.g.
+   *  [0,1] and [0,-1] are both in the pool), so biasing which vector wins a
+   *  slot is what makes more words read backward/diagonal, without needing
+   *  a separate "reverse" step. */
+  diagonalWeight: number;
+}
+
+const DIFFICULTY_TUNING: Record<Difficulty, DifficultyTuning> = {
+  easy: { diagonalWeight: 1 },
+  classic: { diagonalWeight: 2.5 },
+  hard: { diagonalWeight: 4 },
+};
+
+function directionBag(rng: () => number, tuning: DifficultyTuning): Array<[number, number]> {
+  const bag: Array<[number, number]> = [...STRAIGHT_DIRECTIONS];
+  const diagonalCopies = Math.max(1, Math.round(tuning.diagonalWeight));
+  for (let i = 0; i < diagonalCopies; i++) bag.push(...DIAGONAL_DIRECTIONS);
+  return bag.sort(() => rng() - 0.5);
+}
 
 // Rough English letter frequency, so filler cells don't scream "random noise"
 // next to real words and the grid stays readable at a glance.
@@ -62,8 +92,9 @@ function place(grid: (string | null)[][], word: string, row: number, col: number
  * for a given seed + word list, so the same inputs always produce the same
  * grid — that's what makes the daily puzzle shareable without a server.
  */
-export function generatePuzzle(words: string[], size: number, seed: string): Puzzle {
+export function generatePuzzle(words: string[], size: number, seed: string, difficulty: Difficulty = "classic"): Puzzle {
   const rng = makeRng(seed);
+  const tuning = DIFFICULTY_TUNING[difficulty];
   const upper = words.map((w) => w.toUpperCase().replace(/[^A-Z]/g, ""));
   // Longest-first: big words are the hardest to place, so give them first pick
   // of the grid while it's still empty.
@@ -74,7 +105,7 @@ export function generatePuzzle(words: string[], size: number, seed: string): Puz
 
   for (const word of ordered) {
     if (word.length > size) continue; // caller sized the grid wrong; skip rather than crash
-    const dirOrder = [...DIRECTIONS].sort(() => rng() - 0.5);
+    const dirOrder = directionBag(rng, tuning);
     let done = false;
     for (let attempt = 0; attempt < 200 && !done; attempt++) {
       const dir = dirOrder[attempt % dirOrder.length];
@@ -95,10 +126,13 @@ export function generatePuzzle(words: string[], size: number, seed: string): Puz
   return { size, grid: filled, words: placed };
 }
 
-/** Picks a grid size with enough headroom for the longest word and the word count. */
-export function sizeForWords(words: string[]): number {
+/** Picks a grid size with enough headroom for the longest word and the word count.
+ *  A denser multiplier at harder difficulties packs more overlap and makes
+ *  diagonals more likely to actually fit, instead of just being requested. */
+export function sizeForWords(words: string[], difficulty: Difficulty = "classic"): number {
+  const density: Record<Difficulty, number> = { easy: 2.2, classic: 1.8, hard: 1.5 };
   const longest = Math.max(...words.map((w) => w.length));
-  const base = Math.ceil(Math.sqrt(words.reduce((sum, w) => sum + w.length, 0) * 1.8));
+  const base = Math.ceil(Math.sqrt(words.reduce((sum, w) => sum + w.length, 0) * density[difficulty]));
   return Math.max(longest + 1, base, 10);
 }
 
