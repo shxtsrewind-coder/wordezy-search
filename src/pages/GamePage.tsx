@@ -1,14 +1,21 @@
-import React, { useState } from "react";
-import { Lock, Sparkles, RefreshCw, Flame, Timer as TimerIcon } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
+import { Lock, Sparkles, RefreshCw, Flame, Timer as TimerIcon, WifiOff } from "lucide-react";
 import { Grid } from "../components/Grid.tsx";
 import { WordList } from "../components/WordList.tsx";
 import { Leaderboard } from "../components/Leaderboard.tsx";
+import { AuthModal } from "../components/AuthModal.tsx";
 import { getDailyPuzzle, getRandomPuzzle, todayUtc } from "../lib/puzzleOfTheDay.ts";
 import { localSave } from "../lib/localSave.ts";
 import { submitScore } from "../lib/leaderboard.ts";
+import { supabase, ensureSession } from "../lib/supabase.ts";
 import { useTimer, formatTime } from "../hooks/useTimer.ts";
 
 type Mode = "daily" | "unlimited";
+type Phase = "auth_checking" | "choice" | "ready" | "auth_blocked";
+
+/** Shown once per browser session — a returning guest who already chose
+ *  isn't re-prompted on every reload, only on a fresh session. */
+const PLAY_CHOICE_KEY = "wordezySearch.playChoice";
 
 const WordmarkTiles: React.FC = () => (
   <div className="flex items-center gap-1">
@@ -26,17 +33,18 @@ const WordmarkTiles: React.FC = () => (
 );
 
 export const GamePage: React.FC = () => {
+  const [phase, setPhase] = useState<Phase>("auth_checking");
+  const [authBlockedReason, setAuthBlockedReason] = useState<"anonymous_disabled" | "unknown">("unknown");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isAnonymous, setIsAnonymous] = useState(true);
+  const [displayName, setDisplayName] = useState("Player");
+
   const [mode, setMode] = useState<Mode>("daily");
   const [save, setSave] = useState(() => localSave.get());
   const [daily] = useState(() => getDailyPuzzle());
   const [unlimited, setUnlimited] = useState(() => getRandomPuzzle());
   const [foundDaily, setFoundDaily] = useState<Set<string>>(new Set());
   const [foundUnlimited, setFoundUnlimited] = useState<Set<string>>(new Set());
-  const [namePrompt, setNamePrompt] = useState<{ open: boolean; timeMs: number; draft: string }>({
-    open: false,
-    timeMs: 0,
-    draft: "",
-  });
   const [leaderboardKey, setLeaderboardKey] = useState(0);
   const [scoreStatus, setScoreStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
 
@@ -44,18 +52,52 @@ export const GamePage: React.FC = () => {
   const found = mode === "daily" ? foundDaily : foundUnlimited;
   const setFound = mode === "daily" ? setFoundDaily : setFoundUnlimited;
   const isComplete = found.size === active.puzzle.words.length && active.puzzle.words.length > 0;
-  const timerMs = useTimer(`${mode}:${active.date}`, !isComplete);
+  const timerMs = useTimer(`${mode}:${active.date}`, !isComplete && phase === "ready");
 
-  const submitDailyScore = async (timeMs: number, displayName: string) => {
-    setScoreStatus("saving");
+  const bootAuth = useCallback(async () => {
+    setPhase("auth_checking");
     try {
-      await submitScore({ playerId: save.playerId, displayName, puzzleDate: daily.date, timeMs });
-      setScoreStatus("saved");
-      setLeaderboardKey((k) => k + 1);
-    } catch {
-      setScoreStatus("failed"); // leaderboard backend unreachable — streak/solve still counted locally
+      const session = await ensureSession();
+      if (!session.ok) {
+        setAuthBlockedReason(session.reason || "unknown");
+        setPhase("auth_blocked");
+        return;
+      }
+
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData.user?.id ?? null;
+      const anon = userData.user?.is_anonymous ?? true;
+      setUserId(uid);
+      setIsAnonymous(anon);
+
+      if (uid) {
+        const { data: profileRow } = await supabase
+          .from("wordezy_search_profiles")
+          .select("display_name")
+          .eq("id", uid)
+          .maybeSingle();
+        if (profileRow?.display_name) setDisplayName(profileRow.display_name);
+      }
+
+      const choiceDone = typeof window !== "undefined" && sessionStorage.getItem(PLAY_CHOICE_KEY) === "true";
+      setPhase(!anon || choiceDone ? "ready" : "choice");
+    } catch (err) {
+      console.error("Failed to establish session:", err);
+      setAuthBlockedReason("unknown");
+      setPhase("auth_blocked");
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    bootAuth();
+  }, [bootAuth]);
+
+  const handleAuthResolved = useCallback((opts: { isAnonymous: boolean; displayName?: string }) => {
+    if (typeof window !== "undefined") sessionStorage.setItem(PLAY_CHOICE_KEY, "true");
+    setIsAnonymous(opts.isAnonymous);
+    if (opts.displayName) setDisplayName(opts.displayName);
+    setPhase("ready");
+  }, []);
 
   const handleWordFound = (word: string) => {
     const next = new Set(found);
@@ -63,21 +105,18 @@ export const GamePage: React.FC = () => {
     setFound(next);
     if (mode === "daily" && next.size === daily.puzzle.words.length) {
       setSave(localSave.recordDailyWin(todayUtc()));
-      if (save.displayName) {
-        submitDailyScore(timerMs, save.displayName);
-      } else {
-        setNamePrompt({ open: true, timeMs, draft: "" });
+      // Guests never created a wordezy_search_profiles row, so the RPC would
+      // reject them anyway — skip the call rather than show a failure.
+      if (!isAnonymous) {
+        setScoreStatus("saving");
+        submitScore({ puzzleDate: daily.date, timeMs })
+          .then(() => {
+            setScoreStatus("saved");
+            setLeaderboardKey((k) => k + 1);
+          })
+          .catch(() => setScoreStatus("failed"));
       }
     }
-  };
-
-  const confirmName = () => {
-    const name = namePrompt.draft.trim().slice(0, 20);
-    if (!name) return;
-    const updated = localSave.setDisplayName(name);
-    setSave(updated);
-    setNamePrompt({ open: false, timeMs: 0, draft: "" });
-    submitDailyScore(namePrompt.timeMs, name);
   };
 
   const newUnlimitedPuzzle = () => {
@@ -92,6 +131,38 @@ export const GamePage: React.FC = () => {
   };
 
   const locked = mode === "unlimited" && !save.unlockedUnlimited;
+
+  if (phase === "auth_checking") {
+    return (
+      <div className="min-h-screen bg-ink text-paper flex items-center justify-center">
+        <WordmarkTiles />
+      </div>
+    );
+  }
+
+  if (phase === "auth_blocked") {
+    return (
+      <div className="min-h-screen bg-ink text-paper flex flex-col items-center justify-center gap-4 px-4 text-center">
+        <WifiOff className="w-8 h-8 text-danger" />
+        <p className="text-sm text-muted max-w-xs">
+          {authBlockedReason === "anonymous_disabled"
+            ? "Guest play is temporarily unavailable for this game. Please try again shortly."
+            : "Couldn't connect right now. Check your connection and try again."}
+        </p>
+        <button
+          type="button"
+          onClick={bootAuth}
+          className="px-4 py-2 rounded-md bg-correct hover:bg-correct-dim text-paper text-sm font-medium transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (phase === "choice") {
+    return <AuthModal currentDisplayName={displayName} onResolved={handleAuthResolved} />;
+  }
 
   return (
     <div className="min-h-screen bg-ink text-paper flex flex-col items-center px-4 py-6 gap-5">
@@ -164,6 +235,7 @@ export const GamePage: React.FC = () => {
             {isComplete && (
               <p className="text-correct text-sm font-medium mt-1">
                 Solved in {formatTime(timerMs)}
+                {mode === "daily" && isAnonymous ? " — sign in to join the leaderboard" : ""}
                 {mode === "daily" && scoreStatus === "failed" ? " — saved locally, leaderboard unreachable" : ""}
               </p>
             )}
@@ -187,46 +259,8 @@ export const GamePage: React.FC = () => {
             </button>
           )}
 
-          {mode === "daily" && (
-            <Leaderboard date={daily.date} playerId={save.playerId} refreshKey={leaderboardKey} />
-          )}
+          {mode === "daily" && <Leaderboard date={daily.date} currentPlayerId={userId} refreshKey={leaderboardKey} />}
         </>
-      )}
-
-      {namePrompt.open && (
-        <div className="fixed inset-0 bg-ink/80 flex items-center justify-center p-4 z-10">
-          <div className="w-full max-w-xs bg-surface border border-rule rounded-xl p-5 space-y-3">
-            <h2 className="font-display font-semibold text-base">Solved in {formatTime(namePrompt.timeMs)}!</h2>
-            <p className="text-sm text-muted">Pick a name for today's leaderboard.</p>
-            <input
-              type="text"
-              autoFocus
-              maxLength={20}
-              value={namePrompt.draft}
-              onChange={(e) => setNamePrompt((p) => ({ ...p, draft: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && confirmName()}
-              placeholder="Your name"
-              className="w-full px-3 py-2 rounded-md bg-ink border border-rule text-paper text-sm font-mono focus:outline-none focus:border-correct"
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setNamePrompt({ open: false, timeMs: 0, draft: "" })}
-                className="flex-1 py-2 rounded-md text-sm text-muted hover:text-paper transition-colors"
-              >
-                Skip
-              </button>
-              <button
-                type="button"
-                onClick={confirmName}
-                disabled={!namePrompt.draft.trim()}
-                className="flex-1 py-2 rounded-md bg-correct hover:bg-correct-dim disabled:opacity-40 text-paper text-sm font-medium transition-colors"
-              >
-                Save score
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

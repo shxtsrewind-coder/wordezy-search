@@ -162,6 +162,19 @@
   .modal-save { background: var(--correct); color: var(--paper); }
   .modal-save:hover { background: var(--correct-dim); }
   .modal-save:disabled { opacity: 0.4; cursor: default; }
+  .choice-modal { max-width: 420px; }
+  .choice-options { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  .choice-option {
+    text-align: left; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--rule);
+    background: var(--ink); cursor: pointer; display: flex; flex-direction: column; gap: 4px;
+    transition: background-color .15s, border-color .15s; font-family: var(--font-body);
+  }
+  .choice-option:hover { background: var(--surface-high); }
+  .choice-option strong { color: var(--paper); font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+  .choice-option span { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+  .choice-option.highlight { background: var(--correct-soft); border-color: var(--correct-dim); }
+  .choice-option.highlight strong { color: var(--correct); }
+  .choice-option.highlight:hover { background: var(--correct-soft); opacity: 0.85; }
   @media (max-width: 460px) {
     .board-row { flex-direction: column; align-items: center; }
     .word-rail { max-width: 320px; grid-template-columns: repeat(2, minmax(0,1fr)); }
@@ -289,8 +302,9 @@ const THEMES = [
 function themeById(id) { return THEMES.find((t) => t.id === id); }
 
 /* ---------------- lib/puzzleOfTheDay.ts ---------------- */
-const WORDS_PER_PUZZLE = 12;
+const WORDS_PER_PUZZLE = 10;
 const DAILY_DIFFICULTY = "hard"; // the leaderboard-ranked puzzle is the same for everyone, and hard
+const GRID_SIZE_FLOOR = 11; // keeps the board the same size as the old 12-word puzzle
 function todayUtc() { return new Date().toISOString().slice(0, 10); }
 function pickWords(allWords, count, rng) {
   const pool = [...allWords];
@@ -305,7 +319,7 @@ function getDailyPuzzle(date = todayUtc()) {
   const rng = makeRng(`daily:${date}`);
   const theme = THEMES[Math.floor(rng() * THEMES.length)];
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
-  const size = sizeForWords(words, DAILY_DIFFICULTY);
+  const size = Math.max(sizeForWords(words, DAILY_DIFFICULTY), GRID_SIZE_FLOOR);
   const puzzle = generatePuzzle(words, size, `daily:${date}`, DAILY_DIFFICULTY);
   return { date, themeLabel: theme.label, puzzle };
 }
@@ -314,7 +328,7 @@ function getRandomPuzzle(themeId, difficulty = "hard") {
   const seed = `random:${Date.now()}:${Math.random()}`;
   const rng = makeRng(seed);
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
-  const size = sizeForWords(words, difficulty);
+  const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR);
   const puzzle = generatePuzzle(words, size, seed, difficulty);
   return { date: seed, themeLabel: theme.label, puzzle };
 }
@@ -545,14 +559,78 @@ function WordmarkTiles() {
     </div>
   );
 }
+const PLAY_CHOICE_KEY = "wordezySearch.playChoice";
+
+/* ---------------- components/ChoiceScreen.tsx ----------------
+   Mandatory first-run screen (once per browser session): guest play, or a
+   name so wins count on the leaderboard. The real site (Vite/React source)
+   does this with full Supabase accounts (guest / sign up / log in); this
+   CDN preview can't reach Supabase directly, so "join the leaderboard" here
+   just picks a name backed by the artifact's own db capability — same
+   guest-vs-named distinction, lighter mechanism. */
+function ChoiceScreen({ onResolved }) {
+  const [mode, setMode] = useState("main");
+  const [draft, setDraft] = useState("");
+
+  const confirm = () => {
+    const name = draft.trim().slice(0, 20);
+    if (!name) return;
+    onResolved({ isGuest: false, displayName: name });
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal choice-modal">
+        {mode === "main" ? (
+          <>
+            <h2>How do you want to play?</h2>
+            <p>Choose how you'd like to experience Wordezy Search.</p>
+            <div className="choice-options">
+              <button type="button" className="choice-option" onClick={() => onResolved({ isGuest: true })}>
+                <strong>Continue as guest</strong>
+                <span>Play right away. Your progress stays on this device and won't appear on the leaderboard.</span>
+              </button>
+              <button type="button" className="choice-option highlight" onClick={() => setMode("name")}>
+                <strong>Join the leaderboard</strong>
+                <span>Pick a name to compete on today's leaderboard.</span>
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2>Pick a name</h2>
+            <p>This is how you'll appear on the daily leaderboard.</p>
+            <input
+              type="text"
+              autoFocus
+              maxLength={20}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && confirm()}
+              placeholder="Your name"
+            />
+            <div className="modal-actions">
+              <button type="button" className="modal-skip" onClick={() => setMode("main")}>Back</button>
+              <button type="button" className="modal-save" disabled={!draft.trim()} onClick={confirm}>Save</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function GamePage() {
+  const [phase, setPhase] = useState(() =>
+    typeof sessionStorage !== "undefined" && sessionStorage.getItem(PLAY_CHOICE_KEY) === "true" ? "ready" : "choice"
+  );
   const [mode, setMode] = useState("daily");
   const [save, setSave] = useState(() => localSave.get());
+  const [isGuest, setIsGuest] = useState(true);
   const [daily] = useState(() => getDailyPuzzle());
   const [unlimited, setUnlimited] = useState(() => getRandomPuzzle());
   const [foundDaily, setFoundDaily] = useState(() => new Set());
   const [foundUnlimited, setFoundUnlimited] = useState(() => new Set());
-  const [namePrompt, setNamePrompt] = useState({ open: false, timeMs: 0, draft: "" });
   const [leaderboardKey, setLeaderboardKey] = useState(0);
   const [scoreStatus, setScoreStatus] = useState("idle");
 
@@ -560,35 +638,33 @@ function GamePage() {
   const found = mode === "daily" ? foundDaily : foundUnlimited;
   const setFound = mode === "daily" ? setFoundDaily : setFoundUnlimited;
   const isComplete = found.size === active.puzzle.words.length && active.puzzle.words.length > 0;
-  const timerMs = useTimer(`${mode}:${active.date}`, !isComplete);
+  const timerMs = useTimer(`${mode}:${active.date}`, !isComplete && phase === "ready");
 
-  const trySubmit = async (timeMs, displayName) => {
-    setScoreStatus("saving");
-    const ok = await submitDailyScore(daily.date, displayName, timeMs).catch(() => false);
-    if (ok) { setScoreStatus("saved"); setLeaderboardKey((k) => k + 1); }
-    else setScoreStatus("failed");
+  const handleChoiceResolved = (opts) => {
+    try { sessionStorage.setItem(PLAY_CHOICE_KEY, "true"); } catch (e) {}
+    setIsGuest(opts.isGuest);
+    if (opts.displayName) setSave(localSave.setDisplayName(opts.displayName));
+    setPhase("ready");
   };
 
   const handleWordFound = (word) => {
     const next = new Set(found); next.add(word); setFound(next);
     if (mode === "daily" && next.size === daily.puzzle.words.length) {
       setSave(localSave.recordDailyWin(todayUtc()));
-      if (save.displayName) trySubmit(timerMs, save.displayName);
-      else setNamePrompt({ open: true, timeMs, draft: "" });
+      if (!isGuest && save.displayName) {
+        setScoreStatus("saving");
+        submitDailyScore(daily.date, save.displayName, timerMs)
+          .then((ok) => { if (ok) { setScoreStatus("saved"); setLeaderboardKey((k) => k + 1); } else setScoreStatus("failed"); })
+          .catch(() => setScoreStatus("failed"));
+      }
     }
-  };
-
-  const confirmName = () => {
-    const name = namePrompt.draft.trim().slice(0, 20);
-    if (!name) return;
-    setSave(localSave.setDisplayName(name));
-    setNamePrompt({ open: false, timeMs: 0, draft: "" });
-    trySubmit(namePrompt.timeMs, name);
   };
 
   const newUnlimitedPuzzle = () => { setUnlimited(getRandomPuzzle()); setFoundUnlimited(new Set()); };
   const handleUnlock = () => alert("Payments aren't set up yet — Classic Unlimited will unlock for $2 once that's wired in.");
   const locked = mode === "unlimited" && !save.unlockedUnlimited;
+
+  if (phase === "choice") return <ChoiceScreen onResolved={handleChoiceResolved} />;
 
   return (
     <div className="screen">
@@ -624,6 +700,7 @@ function GamePage() {
             {isComplete && (
               <p className="complete-msg">
                 Solved in {formatTime(timerMs)}
+                {mode === "daily" && isGuest ? " — join the leaderboard next time to save this" : ""}
                 {mode === "daily" && scoreStatus === "failed" ? " — saved locally only" : ""}
               </p>
             )}
@@ -639,28 +716,6 @@ function GamePage() {
           )}
           {mode === "daily" && <Leaderboard date={daily.date} refreshKey={leaderboardKey} />}
         </>
-      )}
-
-      {namePrompt.open && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <h2>Solved in {formatTime(namePrompt.timeMs)}!</h2>
-            <p>Pick a name for today's leaderboard.</p>
-            <input
-              type="text"
-              autoFocus
-              maxLength={20}
-              value={namePrompt.draft}
-              onChange={(e) => setNamePrompt((p) => ({ ...p, draft: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && confirmName()}
-              placeholder="Your name"
-            />
-            <div className="modal-actions">
-              <button type="button" className="modal-skip" onClick={() => setNamePrompt({ open: false, timeMs: 0, draft: "" })}>Skip</button>
-              <button type="button" className="modal-save" disabled={!namePrompt.draft.trim()} onClick={confirmName}>Save score</button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

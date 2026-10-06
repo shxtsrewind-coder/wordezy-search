@@ -3,9 +3,9 @@ import { Trophy } from "lucide-react";
 import { getDailyLeaderboard, type LeaderboardEntry } from "../lib/leaderboard.ts";
 import { formatTime } from "../hooks/useTimer.ts";
 
-export const Leaderboard: React.FC<{ date: string; playerId: string; refreshKey: number }> = ({
+export const Leaderboard: React.FC<{ date: string; currentPlayerId: string | null; refreshKey: number }> = ({
   date,
-  playerId,
+  currentPlayerId,
   refreshKey,
 }) => {
   const [entries, setEntries] = useState<LeaderboardEntry[] | null>(null);
@@ -14,11 +14,11 @@ export const Leaderboard: React.FC<{ date: string; playerId: string; refreshKey:
   useEffect(() => {
     let cancelled = false;
     setFailed(false);
-    getDailyLeaderboard(date, playerId)
+    getDailyLeaderboard(date, currentPlayerId)
       .then((rows) => { if (!cancelled) setEntries(rows); })
       .catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
-  }, [date, playerId, refreshKey]);
+  }, [date, currentPlayerId, refreshKey]);
 
   if (failed) return null; // no backend reachable — leaderboard quietly stays hidden
   if (!entries) return null;
@@ -35,7 +35,7 @@ export const Leaderboard: React.FC<{ date: string; playerId: string; refreshKey:
         <ol className="space-y-1">
           {entries.map((entry, i) => (
             <li
-              key={`${entry.displayName}-${i}`}
+              key={entry.playerId}
               className={`flex items-center justify-between text-sm font-mono px-2 py-1 rounded-md ${
                 entry.isYou ? "bg-correct-soft text-correct" : "text-paper/80"
               }`}

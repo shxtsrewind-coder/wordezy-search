@@ -1,28 +1,24 @@
 // Daily leaderboard — backed by Supabase (project shared with Wordezy, see
-// the wordezy_search_scores table). Writes go through a SECURITY DEFINER
-// RPC, never direct table inserts, so a player can only ever submit or
-// improve their own time for a given day (see the migration for the RLS +
-// RPC definition).
+// the wordezy_search_scores / wordezy_search_profiles tables). Writes go
+// through a SECURITY DEFINER RPC that reads the player's identity and
+// display name from the authenticated session itself (auth.uid() +
+// wordezy_search_profiles), never from client-supplied values — see the
+// migration for the RLS + RPC definitions.
 import { supabase } from "./supabase.ts";
 
 export interface LeaderboardEntry {
+  playerId: string;
   displayName: string;
   timeMs: number;
   isYou: boolean;
 }
 
-/** Submits (or improves) this player's time for a puzzle date. Safe to call
- *  even if the player's new time is worse — the RPC only ever keeps the
- *  best. */
-export async function submitScore(opts: {
-  playerId: string;
-  displayName: string;
-  puzzleDate: string;
-  timeMs: number;
-}): Promise<void> {
+/** Submits (or improves) the signed-in player's time for a puzzle date.
+ *  Requires a profile (i.e. a chosen display name) to already exist — call
+ *  after the account/guest choice has resolved. Safe to call even if the
+ *  new time is worse — the RPC only ever keeps the best. */
+export async function submitScore(opts: { puzzleDate: string; timeMs: number }): Promise<void> {
   const { error } = await supabase.rpc("submit_wordezy_search_score", {
-    p_player_id: opts.playerId,
-    p_display_name: opts.displayName,
     p_puzzle_date: opts.puzzleDate,
     p_time_ms: Math.round(opts.timeMs),
   });
@@ -32,7 +28,7 @@ export async function submitScore(opts: {
 /** Top times for a given day, best first. */
 export async function getDailyLeaderboard(
   puzzleDate: string,
-  playerId: string,
+  currentPlayerId: string | null,
   limit = 10
 ): Promise<LeaderboardEntry[]> {
   const { data, error } = await supabase
@@ -43,8 +39,9 @@ export async function getDailyLeaderboard(
     .limit(limit);
   if (error) throw error;
   return (data ?? []).map((row) => ({
+    playerId: row.player_id,
     displayName: row.display_name,
     timeMs: row.time_ms,
-    isYou: row.player_id === playerId,
+    isYou: row.player_id === currentPlayerId,
   }));
 }

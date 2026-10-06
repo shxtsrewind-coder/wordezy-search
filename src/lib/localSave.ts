@@ -1,25 +1,18 @@
-// Local save. Streak and the unlock flag are inherently per-device for now
-// (Wordezy's Supabase pattern is the natural next step for those). The
-// leaderboard is different: scores are already synced server-side
-// (lib/leaderboard.ts), so playerId/displayName here are just this
-// browser's anonymous identity, not the record of anything.
+// Local save for what's inherently per-device: the win streak and the
+// Classic Unlimited unlock flag. Identity and leaderboard standing now live
+// in Supabase (lib/supabase.ts ensureSession + lib/leaderboard.ts) — the
+// cached displayName here is just so the header can render before the
+// profile fetch resolves, never the source of truth.
 const KEY = "wordezySearch.save.v1";
 
 export interface SaveData {
   lastSolvedDate: string | null;
   streak: number;
   unlockedUnlimited: boolean;
-  /** Anonymous, per-browser identity used to attribute leaderboard scores. */
-  playerId: string;
   displayName: string | null;
 }
 
-function newPlayerId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
-  return `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-const DEFAULTS: Omit<SaveData, "playerId"> = {
+const DEFAULTS: SaveData = {
   lastSolvedDate: null,
   streak: 0,
   unlockedUnlimited: false,
@@ -29,11 +22,10 @@ const DEFAULTS: Omit<SaveData, "playerId"> = {
 function read(): SaveData {
   try {
     const raw = localStorage.getItem(KEY);
-    const data: SaveData = raw ? { ...DEFAULTS, playerId: newPlayerId(), ...JSON.parse(raw) } : { ...DEFAULTS, playerId: newPlayerId() };
-    if (!raw) write(data); // persist the freshly-minted playerId immediately
-    return data;
+    if (!raw) return { ...DEFAULTS };
+    return { ...DEFAULTS, ...JSON.parse(raw) };
   } catch {
-    return { ...DEFAULTS, playerId: newPlayerId() };
+    return { ...DEFAULTS };
   }
 }
 

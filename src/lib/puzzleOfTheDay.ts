@@ -2,11 +2,15 @@ import { THEMES } from "../data/wordbank.ts";
 import { makeRng } from "./rng.ts";
 import { generatePuzzle, sizeForWords, type Puzzle, type Difficulty } from "./wordsearch.ts";
 
-const WORDS_PER_PUZZLE = 12;
+const WORDS_PER_PUZZLE = 10;
 // The daily puzzle is the competitive, leaderboard-ranked one, so it's
 // pinned to "hard" (dense grid, diagonal-heavy) for everyone. Classic
 // Unlimited lets the player pick their own difficulty instead.
 const DAILY_DIFFICULTY: Difficulty = "hard";
+// Dropping from 12 to 10 words would otherwise shrink the grid (size scales
+// with total letter count) — this floor keeps the board the same size as
+// before, just a little less crowded.
+const GRID_SIZE_FLOOR = 11;
 
 export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
@@ -37,7 +41,7 @@ export function getDailyPuzzle(date: string = todayUtc()): DailyPuzzle {
   const rng = makeRng(`daily:${date}`);
   const theme = THEMES[Math.floor(rng() * THEMES.length)];
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
-  const size = sizeForWords(words, DAILY_DIFFICULTY);
+  const size = Math.max(sizeForWords(words, DAILY_DIFFICULTY), GRID_SIZE_FLOOR);
   const puzzle = generatePuzzle(words, size, `daily:${date}`, DAILY_DIFFICULTY);
   return { date, themeLabel: theme.label, puzzle };
 }
@@ -52,7 +56,7 @@ export function getRandomPuzzle(themeId?: string, difficulty: Difficulty = "hard
   const seed = `random:${Date.now()}:${Math.random()}`;
   const rng = makeRng(seed);
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
-  const size = sizeForWords(words, difficulty);
+  const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR);
   const puzzle = generatePuzzle(words, size, seed, difficulty);
   return { date: seed, themeLabel: theme.label, puzzle };
 }
