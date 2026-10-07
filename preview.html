@@ -175,6 +175,52 @@
   .choice-option.highlight { background: var(--correct-soft); border-color: var(--correct-dim); }
   .choice-option.highlight strong { color: var(--correct); }
   .choice-option.highlight:hover { background: var(--correct-soft); opacity: 0.85; }
+  .achievements-btn {
+    display: flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 14px; font-family: var(--font-mono); transition: color .15s;
+  }
+  .achievements-btn:hover { color: var(--paper); }
+  @keyframes achievement-in { 0% { opacity: 0; transform: translate(-50%, -12px); } 100% { opacity: 1; transform: translate(-50%, 0); } }
+  .achievement-toast {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 60;
+    display: flex; align-items: center; gap: 12px; background: var(--surface);
+    border: 1px solid var(--correct-dim); border-radius: 12px; padding: 12px 16px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.4); animation: achievement-in .25s ease-out;
+  }
+  .achievement-toast-badge {
+    width: 40px; height: 40px; border-radius: 999px; background: var(--correct); color: var(--ink);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .achievement-toast-label { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--present); margin: 0; }
+  .achievement-toast-title { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--paper); margin: 2px 0 0; }
+  .achievements-modal { max-width: 380px; max-height: 85vh; overflow-y: auto; }
+  .achievements-header { display: flex; align-items: center; justify-content: space-between; }
+  .icon-btn { background: none; border: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 0; }
+  .icon-btn:hover { color: var(--paper); }
+  .achievements-count { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin: 0; }
+  .achievements-list { display: flex; flex-direction: column; gap: 8px; }
+  .achievement-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px;
+    border: 1px solid var(--rule); background: var(--ink);
+  }
+  .achievement-row.unlocked { background: var(--correct-soft); border-color: var(--correct-dim); }
+  .achievement-badge {
+    width: 34px; height: 34px; border-radius: 999px; background: var(--surface-high); color: var(--muted);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .achievement-badge.unlocked { background: var(--correct); color: var(--ink); }
+  .achievement-title { font-size: 14px; font-weight: 500; color: rgba(243,239,230,0.8); margin: 0; }
+  .achievement-title.unlocked { color: var(--correct); }
+  .achievement-desc { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+  .achievement-progress { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin: 3px 0 0; }
+  .leaderboard-tabs { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+  .leaderboard-tab {
+    display: flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 7px; border: none;
+    background: none; color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer;
+    font-family: var(--font-body); transition: background-color .15s, color .15s;
+  }
+  .leaderboard-tab.active { background: var(--correct-soft); color: var(--correct); }
+  .leaderboard-tab:not(.active):hover { color: var(--paper); }
   @media (max-width: 460px) {
     .board-row { flex-direction: column; align-items: center; }
     .word-rail { max-width: 320px; grid-template-columns: repeat(2, minmax(0,1fr)); }
@@ -292,14 +338,18 @@ function matchSelection(selection, puzzle) {
 
 /* ---------------- data/wordbank.ts ---------------- */
 const THEMES = [
-  { id: "animals", label: "Animals", words: ["TIGER","ZEBRA","OTTER","FALCON","RABBIT","PANDA","DOLPHIN","CAMEL","MOOSE","HERON","GECKO","BISON","LLAMA","WEASEL","PELICAN","COYOTE","LYNX","SPARROW","BEAVER","MANTIS"] },
-  { id: "kitchen", label: "Kitchen", words: ["WHISK","KETTLE","LADLE","SKILLET","COLANDER","SPATULA","TONGS","GRATER","APRON","SIEVE","BLENDER","PLATTER","SAUCEPAN","TRIVET","CLEAVER","FUNNEL","PANTRY","OVEN","TOASTER","GRIDDLE"] },
-  { id: "weather", label: "Weather", words: ["THUNDER","DRIZZLE","BREEZE","BLIZZARD","HUMID","FROST","MONSOON","CYCLONE","SLEET","HAZE","RAINBOW","OVERCAST","GALE","MIST","HAIL","SQUALL","SUNSHINE","CLOUDY","TORNADO","DEWPOINT"] },
-  { id: "space", label: "Space", words: ["COMET","NEBULA","ORBIT","GALAXY","METEOR","ASTEROID","ROCKET","LUNAR","SATELLITE","ECLIPSE","COSMOS","PULSAR","GRAVITY","TELESCOPE","QUASAR","CRATER","NOVA","CAPSULE","ASTRONAUT","HORIZON"] },
-  { id: "music", label: "Music", words: ["RHYTHM","MELODY","TEMPO","CHORUS","BALLAD","CADENCE","VIOLIN","TRUMPET","HARMONY","CLARINET","SONATA","ENCORE","OCTAVE","BARITONE","PIANO","DRUMKIT","LYRICS","MAESTRO","TUNING","ACOUSTIC"] },
-  { id: "garden", label: "Garden", words: ["TROWEL","COMPOST","BLOSSOM","TRELLIS","SPROUT","MULCH","ORCHID","HEDGE","WATERING","PERGOLA","SHOVEL","PETUNIA","NURSERY","FERTILE","SEEDLING","BLOOM","GREENHOUSE","PRUNING","LAVENDER","TERRACE"] },
+  { id: "animals", label: "Animals", words: ["FOX","OWL","TIGER","ZEBRA","OTTER","EAGLE","CAMEL","RABBIT","DOLPHIN","PANTHER","FALCON","BEAVER","GIRAFFE","LEOPARD","SQUIRREL","PENGUIN","GORILLA","CHEETAH","BADGER","HERON","WALRUS","COYOTE","PLATYPUS","ARMADILLO","HEDGEHOG","CHIMPANZEE","RHINOCEROS"] },
+  { id: "kitchen", label: "Kitchen", words: ["POT","SPOON","WHISK","KETTLE","LADLE","SKILLET","BLENDER","TOASTER","PLATTER","COLANDER","SPATULA","GRIDDLE","TONGS","GRATER","OVEN","KNIFE","CUTTING","PANTRY","BURNER","APRON","TRIVET","CASSEROLE","SAUCEPAN","DISHWASHER","REFRIGERATOR"] },
+  { id: "weather", label: "Weather", words: ["FOG","HAIL","MIST","STORM","BREEZE","DROUGHT","THUNDER","RAINBOW","BLIZZARD","HUMID","FROST","CYCLONE","SUNSHINE","DRIZZLE","MONSOON","OVERCAST","GALE","TORNADO","CLIMATE","FORECAST","SLEET","HURRICANE","TEMPERATURE","PRECIPITATION","THUNDERSTORM"] },
+  { id: "space", label: "Space", words: ["SUN","STAR","COMET","GALAXY","METEOR","NEBULA","ORBIT","ROCKET","SATURN","ASTEROID","ECLIPSE","GRAVITY","SHUTTLE","TELESCOPE","COSMOS","LUNAR","QUASAR","PULSAR","STARDUST","VOYAGER","CRATER","SOLAR","ASTRONAUT","SATELLITE","CONSTELLATION","ATMOSPHERE"] },
+  { id: "music", label: "Music", words: ["BEAT","SONG","MELODY","RHYTHM","TEMPO","CHORUS","BALLAD","VIOLIN","TRUMPET","CLARINET","HARMONY","ORCHESTRA","CADENCE","ENCORE","BASSLINE","DRUMKIT","LYRICS","OCTAVE","SONATA","TUNING","VINYL","CHOIR","SYMPHONY","ACCORDION","SAXOPHONE","PERCUSSION"] },
+  { id: "garden", label: "Garden", words: ["VINE","BLOOM","SOIL","BLOSSOM","COMPOST","TRELLIS","SPROUT","ORCHARD","PERGOLA","SHOVEL","NURSERY","PETUNIA","LAVENDER","MULCH","GREENHOUSE","HEDGE","WATERING","SEEDLING","TERRACE","PRUNING","SUNFLOWER","WHEELBARROW","IRRIGATION","HORTICULTURE"] },
+  { id: "ocean", label: "Ocean", words: ["WAVE","REEF","TIDE","CORAL","ANCHOR","LAGOON","HARBOR","DOLPHIN","CURRENT","PLANKTON","STARFISH","SEAHORSE","JELLYFISH","LIGHTHOUSE","SHIPWRECK","SUBMARINE","SEAWEED","DRIFTWOOD","HORIZON","SHORELINE","ESTUARY","OCTOPUS","BARNACLE","UNDERWATER"] },
+  { id: "sports", label: "Sports", words: ["GOAL","RACE","TEAM","COACH","STADIUM","REFEREE","DEFENSE","OFFENSE","TROPHY","SPRINT","HURDLE","DRIBBLE","TACKLE","VOLLEYBALL","BASKETBALL","GYMNASTICS","MARATHON","CHAMPION","SCOREBOARD","TOURNAMENT","GOALKEEPER","QUARTERBACK","SCRIMMAGE"] },
+  { id: "travel", label: "Travel", words: ["MAP","VISA","TRAIN","TICKET","AIRPORT","LUGGAGE","PASSPORT","VOYAGE","COMPASS","ITINERARY","SOUVENIR","HOSTEL","LAYOVER","CUSTOMS","BACKPACK","DESTINATION","EXCURSION","LANDMARK","WANDERLUST","EXPEDITION","CARAVAN","CRUISE","TIMEZONE"] },
+  { id: "technology", label: "Technology", words: ["APP","CODE","CHIP","CLOUD","ROUTER","SERVER","BATTERY","KEYBOARD","SOFTWARE","HARDWARE","BLUETOOTH","ALGORITHM","DOWNLOAD","FIREWALL","INTERFACE","BANDWIDTH","PROCESSOR","ENCRYPTION","BROWSER","NETWORK","MICROCHIP","ARTIFICIAL","PROGRAMMING"] },
 ];
-function themeById(id) { return THEMES.find((t) => t.id === id); }
+function themeById(id) { return THEMES.find((t) => t.id === id) ?? THEMES[0]; }
 
 /* ---------------- lib/puzzleOfTheDay.ts ---------------- */
 const WORDS_PER_PUZZLE = 10;
@@ -321,7 +371,7 @@ function getDailyPuzzle(date = todayUtc()) {
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
   const size = Math.max(sizeForWords(words, DAILY_DIFFICULTY), GRID_SIZE_FLOOR);
   const puzzle = generatePuzzle(words, size, `daily:${date}`, DAILY_DIFFICULTY);
-  return { date, themeLabel: theme.label, puzzle };
+  return { date, themeId: theme.id, themeLabel: theme.label, puzzle };
 }
 function getRandomPuzzle(themeId, difficulty = "hard") {
   const theme = themeId ? themeById(themeId) : THEMES[Math.floor(Math.random() * THEMES.length)];
@@ -330,31 +380,55 @@ function getRandomPuzzle(themeId, difficulty = "hard") {
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
   const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR);
   const puzzle = generatePuzzle(words, size, seed, difficulty);
-  return { date: seed, themeLabel: theme.label, puzzle };
+  return { date: seed, themeId: theme.id, themeLabel: theme.label, puzzle };
 }
 
 /* ---------------- lib/localSave.ts ---------------- */
 const SAVE_KEY = "wordezySearch.save.v1";
+const SAVE_DEFAULTS = {
+  streak: 0,
+  lastWinDate: null,
+  unlockedUnlimited: false,
+  displayName: null,
+  totalDailyWins: 0,
+  bestDailyTimeMs: null,
+  maxStreak: 0,
+  themesCleared: [],
+  unlockedAchievements: [],
+};
 const localSave = {
   get() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      if (raw) return { streak: 0, lastWinDate: null, unlockedUnlimited: false, displayName: null, ...JSON.parse(raw) };
+      if (raw) return { ...SAVE_DEFAULTS, ...JSON.parse(raw) };
     } catch (e) {}
-    return { streak: 0, lastWinDate: null, unlockedUnlimited: false, displayName: null };
+    return { ...SAVE_DEFAULTS };
   },
   set(save) {
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
     return save;
   },
-  recordDailyWin(date) {
+  recordDailyWin(date, themeId, timeMs) {
     const save = this.get();
     if (save.lastWinDate === date) return save;
     const y = new Date(date + "T00:00:00Z");
     y.setUTCDate(y.getUTCDate() - 1);
     const yesterday = y.toISOString().slice(0, 10);
     const streak = save.lastWinDate === yesterday ? save.streak + 1 : 1;
-    return this.set({ ...save, streak, lastWinDate: date });
+    const themesCleared = save.themesCleared.includes(themeId) ? save.themesCleared : [...save.themesCleared, themeId];
+    return this.set({
+      ...save,
+      streak,
+      lastWinDate: date,
+      maxStreak: Math.max(save.maxStreak, streak),
+      totalDailyWins: save.totalDailyWins + 1,
+      bestDailyTimeMs: save.bestDailyTimeMs === null ? timeMs : Math.min(save.bestDailyTimeMs, timeMs),
+      themesCleared,
+    });
+  },
+  setUnlockedAchievements(ids) {
+    const save = this.get();
+    return this.set({ ...save, unlockedAchievements: ids });
   },
   // Stub — never call this from anywhere except a confirmed,
   // server-verified purchase once that exists.
@@ -367,6 +441,22 @@ const localSave = {
     return this.set({ ...save, displayName: name.trim().slice(0, 20) || null });
   },
 };
+
+/* ---------------- data/achievements.ts ---------------- */
+const ACHIEVEMENTS = [
+  { id: "first_win", title: "First Find", description: "Solve your first daily puzzle.", icon: "Star", isUnlocked: (s) => s.totalDailyWins >= 1 },
+  { id: "streak_3", title: "On a Roll", description: "Reach a 3-day streak.", icon: "Flame", isUnlocked: (s) => s.maxStreak >= 3 },
+  { id: "streak_7", title: "Week Streak", description: "Reach a 7-day streak.", icon: "Flame", isUnlocked: (s) => s.maxStreak >= 7 },
+  { id: "streak_30", title: "Unstoppable", description: "Reach a 30-day streak.", icon: "Flame", isUnlocked: (s) => s.maxStreak >= 30 },
+  { id: "speed_90", title: "Speed Demon", description: "Solve a daily puzzle in under 90 seconds.", icon: "Gauge", isUnlocked: (s) => s.bestDailyTimeMs !== null && s.bestDailyTimeMs < 90000 },
+  { id: "speed_60", title: "Lightning Fast", description: "Solve a daily puzzle in under 60 seconds.", icon: "Zap", isUnlocked: (s) => s.bestDailyTimeMs !== null && s.bestDailyTimeMs < 60000 },
+  { id: "explorer", title: "Explorer", description: "Solve a daily puzzle in every theme.", icon: "Compass", isUnlocked: (s, themeCount) => s.themesCleared.length >= themeCount },
+  { id: "dedicated_25", title: "Dedicated", description: "Solve 25 daily puzzles.", icon: "Trophy", isUnlocked: (s) => s.totalDailyWins >= 25 },
+];
+function diffNewlyUnlocked(save, themeCount, prevUnlockedIds) {
+  const prev = new Set(prevUnlockedIds);
+  return ACHIEVEMENTS.filter((a) => !prev.has(a.id) && a.isUnlocked(save, themeCount)).map((a) => a.id);
+}
 
 /* ---------------- icons (inline, stand in for lucide-react) ---------------- */
 const Icon = ({ path, size = 16, ...props }) => (
@@ -381,6 +471,13 @@ const FlameIcon = (p) => <Icon {...p} path={<path d="M8.5 14.5A4.5 4.5 0 0 0 13 
 const CheckIcon = (p) => <Icon {...p} path={<path d="M20 6 9 17l-5-5"/>} />;
 const TimerIcon = (p) => <Icon {...p} path={<><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6M12 2v3"/></>} />;
 const TrophyIcon = (p) => <Icon {...p} path={<><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 5H4a1 1 0 0 0-1 1 5 5 0 0 0 4 4.9M17 5h3a1 1 0 0 1 1 1 5 5 0 0 1-4 4.9"/></>} />;
+const StarIcon = (p) => <Icon {...p} path={<path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.9L12 17.8 5.8 21.1 7 14.2l-5-4.9 6.9-1z"/>} />;
+const GaugeIcon = (p) => <Icon {...p} path={<><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.07 19.07A10 10 0 1 0 4.93 4.93"/><path d="M12 12l4-2"/></>} />;
+const ZapIcon = (p) => <Icon {...p} path={<path d="M13 2 3 14h7l-1 8 10-12h-7z"/>} />;
+const CompassIcon = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="10"/><path d="M16 8l-2 6-6 2 2-6z"/></>} />;
+const AwardIcon = (p) => <Icon {...p} path={<><circle cx="12" cy="8" r="6"/><path d="M8.2 13.5 7 22l5-3 5 3-1.2-8.5"/></>} />;
+const CalendarIcon = (p) => <Icon {...p} path={<><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></>} />;
+const ICONS = { Star: StarIcon, Flame: FlameIcon, Zap: ZapIcon, Gauge: GaugeIcon, Compass: CompassIcon, Trophy: TrophyIcon };
 
 /* ---------------- hooks/useTimer.ts ---------------- */
 function formatTime(ms) {
@@ -403,10 +500,15 @@ function useTimer(resetKey, running) {
 
 /* ---------------- components/Leaderboard.tsx ----------------
    Backed by this artifact's own shared `db` — a live, cross-viewer demo of
-   the daily leaderboard. The real site (built from the Vite/React source)
-   talks to a Supabase table instead; same shape, different transport. */
+   the leaderboard. The real site (built from the Vite/React source) talks
+   to a Supabase table instead; same shape, different transport. Each day's
+   score is its own doc (keyed playerId_date) so an all-time tally can
+   aggregate wins and best time across every day a player has played, not
+   just overwrite their latest one. */
 function Leaderboard({ date, refreshKey }) {
-  const [entries, setEntries] = useState(null);
+  const [tab, setTab] = useState("today");
+  const [todayEntries, setTodayEntries] = useState(null);
+  const [allTimeEntries, setAllTimeEntries] = useState(null);
   const [selfId, setSelfId] = useState(null);
   const [available, setAvailable] = useState(true);
 
@@ -421,7 +523,7 @@ function Leaderboard({ date, refreshKey }) {
       setSelfId(id);
       try {
         const snap = await db.collection("scores").where("date", "==", date).orderBy("timeMs", "asc").limit(10).get();
-        if (!cancelled) setEntries(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        if (!cancelled) setTodayEntries(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (e) {
         if (!cancelled) setAvailable(false);
       }
@@ -429,19 +531,70 @@ function Leaderboard({ date, refreshKey }) {
     return () => { cancelled = true; };
   }, [date, refreshKey]);
 
-  if (!available || entries === null) return null;
+  React.useEffect(() => {
+    if (tab !== "alltime" || allTimeEntries !== null || !available) return;
+    let cancelled = false;
+    (async () => {
+      if (!window.claude?.use) return;
+      const db = await window.claude.use("db");
+      if (!db) return;
+      try {
+        const snap = await db.collection("scores").orderBy("timeMs", "asc").limit(500).get();
+        const byPlayer = new Map();
+        for (const d of snap.docs) {
+          const row = d.data();
+          const existing = byPlayer.get(row.playerId) || { playerId: row.playerId, displayName: row.displayName, wins: 0, bestTimeMs: Infinity };
+          existing.wins += 1;
+          existing.bestTimeMs = Math.min(existing.bestTimeMs, row.timeMs);
+          existing.displayName = row.displayName;
+          byPlayer.set(row.playerId, existing);
+        }
+        const ranked = [...byPlayer.values()].sort((a, b) => b.wins - a.wins || a.bestTimeMs - b.bestTimeMs).slice(0, 10);
+        if (!cancelled) setAllTimeEntries(ranked);
+      } catch (e) {
+        if (!cancelled) setAllTimeEntries([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, available, allTimeEntries]);
+
+  React.useEffect(() => { setAllTimeEntries(null); }, [refreshKey]);
+
+  if (!available) return null;
 
   return (
     <div className="leaderboard">
-      <div className="leaderboard-title"><TrophyIcon size={16} /> Today's fastest</div>
-      {entries.length === 0 ? (
-        <p className="leaderboard-empty">No times yet today — be the first.</p>
+      <div className="leaderboard-tabs">
+        <button type="button" className={`leaderboard-tab ${tab === "today" ? "active" : ""}`} onClick={() => setTab("today")}>
+          <TrophyIcon size={14} /> Today
+        </button>
+        <button type="button" className={`leaderboard-tab ${tab === "alltime" ? "active" : ""}`} onClick={() => setTab("alltime")}>
+          <CalendarIcon size={14} /> All-Time
+        </button>
+      </div>
+      {tab === "today" ? (
+        todayEntries === null ? null : todayEntries.length === 0 ? (
+          <p className="leaderboard-empty">No times yet today — be the first.</p>
+        ) : (
+          <ol className="leaderboard-list">
+            {todayEntries.map((e, i) => (
+              <li key={e.id} className={`leaderboard-row ${e.playerId === selfId ? "you" : ""}`}>
+                <span>{i + 1}. {e.displayName}{e.playerId === selfId ? " (you)" : ""}</span>
+                <span>{formatTime(e.timeMs)}</span>
+              </li>
+            ))}
+          </ol>
+        )
+      ) : allTimeEntries === null ? (
+        <p className="leaderboard-empty">Loading…</p>
+      ) : allTimeEntries.length === 0 ? (
+        <p className="leaderboard-empty">No wins recorded yet — be the first.</p>
       ) : (
         <ol className="leaderboard-list">
-          {entries.map((e, i) => (
-            <li key={e.id} className={`leaderboard-row ${e.id === selfId ? "you" : ""}`}>
-              <span>{i + 1}. {e.displayName}{e.id === selfId ? " (you)" : ""}</span>
-              <span>{formatTime(e.timeMs)}</span>
+          {allTimeEntries.map((e, i) => (
+            <li key={e.playerId} className={`leaderboard-row ${e.playerId === selfId ? "you" : ""}`}>
+              <span>{i + 1}. {e.displayName}{e.playerId === selfId ? " (you)" : ""}</span>
+              <span>{e.wins} win{e.wins === 1 ? "" : "s"} · {formatTime(e.bestTimeMs)}</span>
             </li>
           ))}
         </ol>
@@ -456,7 +609,7 @@ async function submitDailyScore(date, displayName, timeMs) {
   if (!db || !user) return false;
   const id = await user.id();
   if (!id) return false;
-  await db.doc("scores/" + id).set({ displayName, date, timeMs, updatedAt: Date.now() });
+  await db.doc(`scores/${id}_${date}`).set({ playerId: id, displayName, date, timeMs, updatedAt: Date.now() });
   return true;
 }
 
@@ -549,6 +702,115 @@ function WordList({ words, found }) {
   );
 }
 
+/* ---------------- components/Confetti.tsx ---------------- */
+const CONFETTI_COLORS = ["#2f9e6e", "#c9922f", "#f3efe6", "#a87725", "#24805a"];
+function Confetti({ durationMs = 1800 }) {
+  const canvasRef = useRef(null);
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    const resize = () => {
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    const particles = Array.from({ length: 80 }, () => ({
+      x: window.innerWidth / 2 + (Math.random() - 0.5) * 120,
+      y: window.innerHeight * 0.3,
+      vx: (Math.random() - 0.5) * 8,
+      vy: -(Math.random() * 6 + 4),
+      size: Math.random() * 6 + 4,
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      rotation: Math.random() * Math.PI,
+      spin: (Math.random() - 0.5) * 0.3,
+    }));
+    let raf = 0, running = true;
+    const gravity = 0.25;
+    const tick = () => {
+      if (!running) return;
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      for (const p of particles) {
+        p.vy += gravity; p.x += p.vx; p.y += p.vy; p.rotation += p.spin;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+        ctx.restore();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    const stop = setTimeout(() => { running = false; cancelAnimationFrame(raf); }, durationMs);
+    return () => { running = false; clearTimeout(stop); cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, [durationMs]);
+  return <canvas ref={canvasRef} aria-hidden="true" style={{ pointerEvents: "none", position: "fixed", inset: 0, zIndex: 50 }} />;
+}
+
+/* ---------------- components/AchievementToast.tsx ---------------- */
+function AchievementToastStack({ achievements, onDone }) {
+  const [index, setIndex] = useState(0);
+  React.useEffect(() => {
+    if (index >= achievements.length) { onDone(); return; }
+    const t = setTimeout(() => setIndex((i) => i + 1), 3000);
+    return () => clearTimeout(t);
+  }, [index, achievements.length, onDone]);
+  if (index >= achievements.length) return null;
+  const a = achievements[index];
+  const AchIcon = ICONS[a.icon];
+  return (
+    <div role="status" className="achievement-toast">
+      <div className="achievement-toast-badge"><AchIcon size={18} /></div>
+      <div>
+        <p className="achievement-toast-label">Achievement unlocked</p>
+        <p className="achievement-toast-title">{a.title}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- components/AchievementsModal.tsx ---------------- */
+function AchievementsModal({ save, onClose }) {
+  const unlocked = new Set(save.unlockedAchievements);
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal achievements-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="achievements-header">
+          <h2>Achievements</h2>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <p className="achievements-count">{unlocked.size} / {ACHIEVEMENTS.length} unlocked</p>
+        <div className="achievements-list">
+          {ACHIEVEMENTS.map((a) => {
+            const isUnlocked = unlocked.has(a.id);
+            const AchIcon = ICONS[a.icon];
+            const progress = a.id === "explorer" ? `${save.themesCleared.length}/${THEMES.length} themes` : null;
+            return (
+              <div key={a.id} className={`achievement-row ${isUnlocked ? "unlocked" : ""}`}>
+                <div className={`achievement-badge ${isUnlocked ? "unlocked" : ""}`}>
+                  {isUnlocked ? <AchIcon size={16} /> : <LockIcon size={14} />}
+                </div>
+                <div>
+                  <p className={`achievement-title ${isUnlocked ? "unlocked" : ""}`}>{a.title}</p>
+                  <p className="achievement-desc">{a.description}</p>
+                  {!isUnlocked && progress && <p className="achievement-progress">{progress}</p>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- pages/GamePage.tsx ---------------- */
 function WordmarkTiles() {
   return (
@@ -633,6 +895,9 @@ function GamePage() {
   const [foundUnlimited, setFoundUnlimited] = useState(() => new Set());
   const [leaderboardKey, setLeaderboardKey] = useState(0);
   const [scoreStatus, setScoreStatus] = useState("idle");
+  const [showAchievements, setShowAchievements] = useState(false);
+  const [newlyUnlocked, setNewlyUnlocked] = useState(null);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   const active = mode === "daily" ? daily : unlimited;
   const found = mode === "daily" ? foundDaily : foundUnlimited;
@@ -650,7 +915,18 @@ function GamePage() {
   const handleWordFound = (word) => {
     const next = new Set(found); next.add(word); setFound(next);
     if (mode === "daily" && next.size === daily.puzzle.words.length) {
-      setSave(localSave.recordDailyWin(todayUtc()));
+      const prevUnlocked = save.unlockedAchievements;
+      const updated = localSave.recordDailyWin(todayUtc(), daily.themeId, timerMs);
+      setSave(updated);
+
+      const newlyUnlockedIds = diffNewlyUnlocked(updated, THEMES.length, prevUnlocked);
+      if (newlyUnlockedIds.length > 0) {
+        localSave.setUnlockedAchievements([...prevUnlocked, ...newlyUnlockedIds]);
+        setNewlyUnlocked(ACHIEVEMENTS.filter((a) => newlyUnlockedIds.includes(a.id)));
+      }
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 1800);
+
       if (!isGuest && save.displayName) {
         setScoreStatus("saving");
         submitDailyScore(daily.date, save.displayName, timerMs)
@@ -673,8 +949,17 @@ function GamePage() {
         <div className="header-right">
           {!locked && <div className="timer"><TimerIcon size={16} />{formatTime(timerMs)}</div>}
           {save.streak > 0 && <div className="streak"><FlameIcon size={16} />{save.streak}</div>}
+          <button type="button" className="achievements-btn" onClick={() => setShowAchievements(true)} aria-label="Achievements">
+            <AwardIcon size={16} />{save.unlockedAchievements.length}/{ACHIEVEMENTS.length}
+          </button>
         </div>
       </header>
+
+      {showConfetti && <Confetti durationMs={1800} />}
+      {newlyUnlocked && newlyUnlocked.length > 0 && (
+        <AchievementToastStack achievements={newlyUnlocked} onDone={() => setNewlyUnlocked(null)} />
+      )}
+      {showAchievements && <AchievementsModal save={save} onClose={() => setShowAchievements(false)} />}
 
       <div className="modes">
         <button type="button" onClick={() => setMode("daily")} className={`mode-btn ${mode === "daily" ? "active" : ""}`}>Daily</button>

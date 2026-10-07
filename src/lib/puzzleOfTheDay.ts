@@ -28,6 +28,7 @@ function pickWords(allWords: string[], count: number, rng: () => number): string
 
 export interface DailyPuzzle {
   date: string;
+  themeId: string;
   themeLabel: string;
   puzzle: Puzzle;
 }
@@ -43,7 +44,7 @@ export function getDailyPuzzle(date: string = todayUtc()): DailyPuzzle {
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
   const size = Math.max(sizeForWords(words, DAILY_DIFFICULTY), GRID_SIZE_FLOOR);
   const puzzle = generatePuzzle(words, size, `daily:${date}`, DAILY_DIFFICULTY);
-  return { date, themeLabel: theme.label, puzzle };
+  return { date, themeId: theme.id, themeLabel: theme.label, puzzle };
 }
 
 /**
@@ -58,5 +59,5 @@ export function getRandomPuzzle(themeId?: string, difficulty: Difficulty = "hard
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
   const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR);
   const puzzle = generatePuzzle(words, size, seed, difficulty);
-  return { date: seed, themeLabel: theme.label, puzzle };
+  return { date: seed, themeId: theme.id, themeLabel: theme.label, puzzle };
 }

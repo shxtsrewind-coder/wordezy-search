@@ -45,3 +45,30 @@ export async function getDailyLeaderboard(
     isYou: row.player_id === currentPlayerId,
   }));
 }
+
+export interface AllTimeLeaderboardEntry {
+  playerId: string;
+  displayName: string;
+  wins: number;
+  bestTimeMs: number;
+  isYou: boolean;
+}
+
+/** All-time standings across every daily puzzle ever played, ranked by total
+ *  wins first and best time as the tiebreaker — rewards showing up every day
+ *  over a single lucky fast solve. Backed by a plain SECURITY INVOKER
+ *  aggregate RPC, since the scores table is already public-readable. */
+export async function getAllTimeLeaderboard(
+  currentPlayerId: string | null,
+  limit = 10
+): Promise<AllTimeLeaderboardEntry[]> {
+  const { data, error } = await supabase.rpc("wordezy_search_alltime_leaderboard", { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []).map((row: { player_id: string; display_name: string; wins: number; best_time_ms: number }) => ({
+    playerId: row.player_id,
+    displayName: row.display_name,
+    wins: row.wins,
+    bestTimeMs: row.best_time_ms,
+    isYou: row.player_id === currentPlayerId,
+  }));
+}

@@ -1,14 +1,19 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Lock, Sparkles, RefreshCw, Flame, Timer as TimerIcon, WifiOff } from "lucide-react";
+import { Lock, Sparkles, RefreshCw, Flame, Timer as TimerIcon, WifiOff, Award } from "lucide-react";
 import { Grid } from "../components/Grid.tsx";
 import { WordList } from "../components/WordList.tsx";
 import { Leaderboard } from "../components/Leaderboard.tsx";
 import { AuthModal } from "../components/AuthModal.tsx";
+import { Confetti } from "../components/Confetti.tsx";
+import { AchievementToastStack } from "../components/AchievementToast.tsx";
+import { AchievementsModal } from "../components/AchievementsModal.tsx";
 import { getDailyPuzzle, getRandomPuzzle, todayUtc } from "../lib/puzzleOfTheDay.ts";
 import { localSave } from "../lib/localSave.ts";
 import { submitScore } from "../lib/leaderboard.ts";
 import { supabase, ensureSession } from "../lib/supabase.ts";
 import { useTimer, formatTime } from "../hooks/useTimer.ts";
+import { ACHIEVEMENTS, diffNewlyUnlocked, type Achievement } from "../data/achievements.ts";
+import { THEMES } from "../data/wordbank.ts";
 
 type Mode = "daily" | "unlimited";
 type Phase = "auth_checking" | "choice" | "ready" | "auth_blocked";
@@ -47,6 +52,9 @@ export const GamePage: React.FC = () => {
   const [foundUnlimited, setFoundUnlimited] = useState<Set<string>>(new Set());
   const [leaderboardKey, setLeaderboardKey] = useState(0);
   const [scoreStatus, setScoreStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [showAchievements, setShowAchievements] = useState(false);
+  const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[] | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   const active = mode === "daily" ? daily : unlimited;
   const found = mode === "daily" ? foundDaily : foundUnlimited;
@@ -104,7 +112,18 @@ export const GamePage: React.FC = () => {
     next.add(word);
     setFound(next);
     if (mode === "daily" && next.size === daily.puzzle.words.length) {
-      setSave(localSave.recordDailyWin(todayUtc()));
+      const prevUnlocked = save.unlockedAchievements;
+      const updated = localSave.recordDailyWin(todayUtc(), daily.themeId, timerMs);
+      setSave(updated);
+
+      const newlyUnlockedIds = diffNewlyUnlocked(updated, THEMES.length, prevUnlocked);
+      if (newlyUnlockedIds.length > 0) {
+        localSave.setUnlockedAchievements([...prevUnlocked, ...newlyUnlockedIds]);
+        setNewlyUnlocked(ACHIEVEMENTS.filter((a) => newlyUnlockedIds.includes(a.id)));
+      }
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 1800);
+
       // Guests never created a wordezy_search_profiles row, so the RPC would
       // reject them anyway — skip the call rather than show a failure.
       if (!isAnonymous) {
@@ -184,8 +203,23 @@ export const GamePage: React.FC = () => {
               {save.streak}
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => setShowAchievements(true)}
+            className="flex items-center gap-1.5 text-sm text-muted hover:text-paper transition-colors"
+            aria-label="Achievements"
+          >
+            <Award className="w-4 h-4" />
+            {save.unlockedAchievements.length}/{ACHIEVEMENTS.length}
+          </button>
         </div>
       </header>
+
+      {showConfetti && <Confetti durationMs={1800} />}
+      {newlyUnlocked && newlyUnlocked.length > 0 && (
+        <AchievementToastStack achievements={newlyUnlocked} onDone={() => setNewlyUnlocked(null)} />
+      )}
+      {showAchievements && <AchievementsModal save={save} onClose={() => setShowAchievements(false)} />}
 
       <div className="flex items-center gap-1 p-1 bg-surface border border-rule rounded-lg">
         <button

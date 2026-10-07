@@ -27,6 +27,15 @@ export default {
         sans: ["Archivo", "ui-sans-serif", "system-ui"],
         mono: ["IBM Plex Mono", "ui-monospace", "monospace"],
       },
+      keyframes: {
+        "achievement-in": {
+          "0%": { opacity: "0", transform: "translate(-50%, -12px)" },
+          "100%": { opacity: "1", transform: "translate(-50%, 0)" },
+        },
+      },
+      animation: {
+        "achievement-in": "achievement-in 0.25s ease-out",
+      },
     },
   },
   plugins: [],
