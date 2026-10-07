@@ -7,14 +7,16 @@ import {
   type AllTimeLeaderboardEntry,
 } from "../lib/leaderboard.ts";
 import { formatTime } from "../hooks/useTimer.ts";
+import type { Difficulty } from "../lib/wordsearch.ts";
 
 type Tab = "today" | "alltime";
 
-export const Leaderboard: React.FC<{ date: string; currentPlayerId: string | null; refreshKey: number }> = ({
-  date,
-  currentPlayerId,
-  refreshKey,
-}) => {
+export const Leaderboard: React.FC<{
+  date: string;
+  difficulty: Difficulty;
+  currentPlayerId: string | null;
+  refreshKey: number;
+}> = ({ date, difficulty, currentPlayerId, refreshKey }) => {
   const [tab, setTab] = useState<Tab>("today");
   const [dailyEntries, setDailyEntries] = useState<LeaderboardEntry[] | null>(null);
   const [allTimeEntries, setAllTimeEntries] = useState<AllTimeLeaderboardEntry[] | null>(null);
@@ -23,11 +25,12 @@ export const Leaderboard: React.FC<{ date: string; currentPlayerId: string | nul
   useEffect(() => {
     let cancelled = false;
     setFailed(false);
-    getDailyLeaderboard(date, currentPlayerId)
+    setDailyEntries(null);
+    getDailyLeaderboard(date, difficulty, currentPlayerId)
       .then((rows) => { if (!cancelled) setDailyEntries(rows); })
       .catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
-  }, [date, currentPlayerId, refreshKey]);
+  }, [date, difficulty, currentPlayerId, refreshKey]);
 
   useEffect(() => {
     if (tab !== "alltime" || allTimeEntries !== null) return;
@@ -57,7 +60,7 @@ export const Leaderboard: React.FC<{ date: string; currentPlayerId: string | nul
           }`}
         >
           <Trophy className="w-3.5 h-3.5" />
-          Today
+          Today · {difficulty === "classic" ? "Normal" : difficulty[0].toUpperCase() + difficulty.slice(1)}
         </button>
         <button
           type="button"

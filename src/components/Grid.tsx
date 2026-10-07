@@ -6,6 +6,9 @@ interface GridProps {
   puzzle: Puzzle;
   foundWords: Set<string>;
   onWordFound: (word: string) => void;
+  /** "Reveal Letter" hint target — briefly highlighted, independent of the
+   *  player's own selection/found state. */
+  revealedCell?: Cell | null;
 }
 
 /** Straight-line path from `from` to `to`, snapped to one of the 8
@@ -21,7 +24,7 @@ function pathBetween(from: Cell, to: Cell): Cell[] {
   return path;
 }
 
-export const Grid: React.FC<GridProps> = ({ puzzle, foundWords, onWordFound }) => {
+export const Grid: React.FC<GridProps> = ({ puzzle, foundWords, onWordFound, revealedCell = null }) => {
   const [anchor, setAnchor] = useState<Cell | null>(null);
   const [selection, setSelection] = useState<Cell[]>([]);
   const dragging = useRef(false);
@@ -90,6 +93,7 @@ export const Grid: React.FC<GridProps> = ({ puzzle, foundWords, onWordFound }) =
           const key = `${r},${c}`;
           const isFound = foundCells.has(key);
           const isSelected = selectedCells.has(key);
+          const isRevealed = revealedCell?.row === r && revealedCell?.col === c;
           return (
             <div
               key={key}
@@ -98,7 +102,7 @@ export const Grid: React.FC<GridProps> = ({ puzzle, foundWords, onWordFound }) =
               onMouseDown={() => handleStart({ row: r, col: c })}
               onTouchStart={() => handleStart({ row: r, col: c })}
               className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center font-mono font-semibold text-sm rounded-[4px] transition-colors cursor-pointer
-                ${isFound ? "bg-correct text-paper" : isSelected ? "bg-present text-ink" : "bg-ink text-paper/80 hover:bg-surface-high"}`}
+                ${isFound ? "bg-correct text-paper" : isSelected ? "bg-present text-ink" : isRevealed ? "bg-present-soft text-present ring-2 ring-present animate-pulse" : "bg-ink text-paper/80 hover:bg-surface-high"}`}
             >
               {letter}
             </div>

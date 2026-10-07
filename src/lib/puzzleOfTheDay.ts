@@ -3,14 +3,12 @@ import { makeRng } from "./rng.ts";
 import { generatePuzzle, sizeForWords, type Puzzle, type Difficulty } from "./wordsearch.ts";
 
 const WORDS_PER_PUZZLE = 10;
-// The daily puzzle is the competitive, leaderboard-ranked one, so it's
-// pinned to "hard" (dense grid, diagonal-heavy) for everyone. Classic
-// Unlimited lets the player pick their own difficulty instead.
-const DAILY_DIFFICULTY: Difficulty = "hard";
 // Dropping from 12 to 10 words would otherwise shrink the grid (size scales
 // with total letter count) — this floor keeps the board the same size as
 // before, just a little less crowded.
 const GRID_SIZE_FLOOR = 11;
+export const DAILY_DIFFICULTIES: Difficulty[] = ["easy", "classic", "hard"];
+export const DEFAULT_DAILY_DIFFICULTY: Difficulty = "classic";
 
 export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
@@ -28,23 +26,28 @@ function pickWords(allWords: string[], count: number, rng: () => number): string
 
 export interface DailyPuzzle {
   date: string;
+  difficulty: Difficulty;
   themeId: string;
   themeLabel: string;
   puzzle: Puzzle;
 }
 
 /**
- * One puzzle per UTC day, identical for every player — same idea as
- * Wordezy's daily word: the date is the only input, so there's nothing to
- * fetch or agree on with a server.
+ * One puzzle per UTC day, identical for every player at a given difficulty —
+ * same idea as Wordezy's daily word: the date (+ difficulty) is the only
+ * input, so there's nothing to fetch or agree on with a server. The theme
+ * and word list are picked from the date alone, so "today's puzzle" is the
+ * same words on Easy, Normal and Hard — only the grid's size and how much
+ * it leans on diagonals changes, same as choosing a difficulty for the same
+ * day's puzzle on sites like the Washington Post's word search.
  */
-export function getDailyPuzzle(date: string = todayUtc()): DailyPuzzle {
+export function getDailyPuzzle(date: string = todayUtc(), difficulty: Difficulty = DEFAULT_DAILY_DIFFICULTY): DailyPuzzle {
   const rng = makeRng(`daily:${date}`);
   const theme = THEMES[Math.floor(rng() * THEMES.length)];
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
-  const size = Math.max(sizeForWords(words, DAILY_DIFFICULTY), GRID_SIZE_FLOOR);
-  const puzzle = generatePuzzle(words, size, `daily:${date}`, DAILY_DIFFICULTY);
-  return { date, themeId: theme.id, themeLabel: theme.label, puzzle };
+  const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR);
+  const puzzle = generatePuzzle(words, size, `daily:${date}:${difficulty}`, difficulty);
+  return { date, difficulty, themeId: theme.id, themeLabel: theme.label, puzzle };
 }
 
 /**
@@ -59,5 +62,5 @@ export function getRandomPuzzle(themeId?: string, difficulty: Difficulty = "hard
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
   const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR);
   const puzzle = generatePuzzle(words, size, seed, difficulty);
-  return { date: seed, themeId: theme.id, themeLabel: theme.label, puzzle };
+  return { date: seed, difficulty, themeId: theme.id, themeLabel: theme.label, puzzle };
 }

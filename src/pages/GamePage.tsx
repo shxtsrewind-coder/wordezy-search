@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Lock, Sparkles, RefreshCw, Flame, Timer as TimerIcon, WifiOff, Award } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Lock, Sparkles, RefreshCw, Flame, Timer as TimerIcon, WifiOff, Award, Lightbulb, Eye } from "lucide-react";
 import { Grid } from "../components/Grid.tsx";
 import { WordList } from "../components/WordList.tsx";
 import { Leaderboard } from "../components/Leaderboard.tsx";
@@ -7,16 +7,28 @@ import { AuthModal } from "../components/AuthModal.tsx";
 import { Confetti } from "../components/Confetti.tsx";
 import { AchievementToastStack } from "../components/AchievementToast.tsx";
 import { AchievementsModal } from "../components/AchievementsModal.tsx";
-import { getDailyPuzzle, getRandomPuzzle, todayUtc } from "../lib/puzzleOfTheDay.ts";
+import { getDailyPuzzle, getRandomPuzzle, todayUtc, DAILY_DIFFICULTIES } from "../lib/puzzleOfTheDay.ts";
 import { localSave } from "../lib/localSave.ts";
 import { submitScore } from "../lib/leaderboard.ts";
 import { supabase, ensureSession } from "../lib/supabase.ts";
 import { useTimer, formatTime } from "../hooks/useTimer.ts";
 import { ACHIEVEMENTS, diffNewlyUnlocked, type Achievement } from "../data/achievements.ts";
 import { THEMES } from "../data/wordbank.ts";
+import type { Cell, Difficulty } from "../lib/wordsearch.ts";
 
 type Mode = "daily" | "unlimited";
 type Phase = "auth_checking" | "choice" | "ready" | "auth_blocked";
+
+/** Matches the Washington Post / Arkadium word search's own labels — our
+ *  internal "classic" id (reused from Classic Unlimited) reads as "Normal"
+ *  here. */
+const DIFFICULTY_LABELS: Record<Difficulty, string> = { easy: "Easy", classic: "Normal", hard: "Hard" };
+
+// Free, limited-use hints — no ad network wired up (Arkadium's "Reveal Word"
+// unlocks via a rewarded ad; we don't have one yet), so both are just capped
+// per puzzle instead of ad-gated.
+const HINT_LETTER_LIMIT = 3;
+const HINT_WORD_LIMIT = 1;
 
 /** Shown once per browser session — a returning guest who already chose
  *  isn't re-prompted on every reload, only on a fresh session. */
@@ -46,7 +58,8 @@ export const GamePage: React.FC = () => {
 
   const [mode, setMode] = useState<Mode>("daily");
   const [save, setSave] = useState(() => localSave.get());
-  const [daily] = useState(() => getDailyPuzzle());
+  const [dailyDifficulty, setDailyDifficulty] = useState<Difficulty>(() => localSave.get().lastDailyDifficulty);
+  const daily = useMemo(() => getDailyPuzzle(todayUtc(), dailyDifficulty), [dailyDifficulty]);
   const [unlimited, setUnlimited] = useState(() => getRandomPuzzle());
   const [foundDaily, setFoundDaily] = useState<Set<string>>(new Set());
   const [foundUnlimited, setFoundUnlimited] = useState<Set<string>>(new Set());
@@ -55,12 +68,25 @@ export const GamePage: React.FC = () => {
   const [showAchievements, setShowAchievements] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[] | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [hintLettersUsed, setHintLettersUsed] = useState(0);
+  const [hintWordsUsed, setHintWordsUsed] = useState(0);
+  const [revealedCell, setRevealedCell] = useState<Cell | null>(null);
+
+  // A different daily puzzle (new difficulty, or Classic Unlimited dealing a
+  // fresh grid) resets progress and hint allowances — each puzzle gets its
+  // own 3 letter reveals + 1 word reveal, not a running total.
+  useEffect(() => {
+    setFoundDaily(new Set());
+    setHintLettersUsed(0);
+    setHintWordsUsed(0);
+    setRevealedCell(null);
+  }, [daily.date, daily.difficulty]);
 
   const active = mode === "daily" ? daily : unlimited;
   const found = mode === "daily" ? foundDaily : foundUnlimited;
   const setFound = mode === "daily" ? setFoundDaily : setFoundUnlimited;
   const isComplete = found.size === active.puzzle.words.length && active.puzzle.words.length > 0;
-  const timerMs = useTimer(`${mode}:${active.date}`, !isComplete && phase === "ready");
+  const timerMs = useTimer(`${mode}:${active.date}:${active.difficulty}`, !isComplete && phase === "ready");
 
   const bootAuth = useCallback(async () => {
     setPhase("auth_checking");
@@ -113,7 +139,7 @@ export const GamePage: React.FC = () => {
     setFound(next);
     if (mode === "daily" && next.size === daily.puzzle.words.length) {
       const prevUnlocked = save.unlockedAchievements;
-      const updated = localSave.recordDailyWin(todayUtc(), daily.themeId, timerMs);
+      const updated = localSave.recordDailyWin(todayUtc(), dailyDifficulty, daily.themeId, timerMs);
       setSave(updated);
 
       const newlyUnlockedIds = diffNewlyUnlocked(updated, THEMES.length, prevUnlocked);
@@ -128,7 +154,7 @@ export const GamePage: React.FC = () => {
       // reject them anyway — skip the call rather than show a failure.
       if (!isAnonymous) {
         setScoreStatus("saving");
-        submitScore({ puzzleDate: daily.date, timeMs })
+        submitScore({ puzzleDate: daily.date, difficulty: dailyDifficulty, timeMs })
           .then(() => {
             setScoreStatus("saved");
             setLeaderboardKey((k) => k + 1);
@@ -138,9 +164,39 @@ export const GamePage: React.FC = () => {
     }
   };
 
+  const handleSelectDailyDifficulty = (difficulty: Difficulty) => {
+    if (difficulty === dailyDifficulty) return;
+    setDailyDifficulty(difficulty);
+    setSave(localSave.setLastDailyDifficulty(difficulty));
+    setScoreStatus("idle");
+  };
+
+  /** Flashes the first letter of an unfound word — doesn't mark anything
+   *  found, just points at where to look. */
+  const handleRevealLetter = () => {
+    if (hintLettersUsed >= HINT_LETTER_LIMIT) return;
+    const target = active.puzzle.words.find((w) => !found.has(w.word));
+    if (!target) return;
+    setRevealedCell({ row: target.row, col: target.col });
+    setHintLettersUsed((n) => n + 1);
+    setTimeout(() => setRevealedCell(null), 1500);
+  };
+
+  /** Fully reveals one unfound word, same as finding it by dragging. */
+  const handleRevealWord = () => {
+    if (hintWordsUsed >= HINT_WORD_LIMIT) return;
+    const target = active.puzzle.words.find((w) => !found.has(w.word));
+    if (!target) return;
+    setHintWordsUsed((n) => n + 1);
+    handleWordFound(target.word);
+  };
+
   const newUnlimitedPuzzle = () => {
     setUnlimited(getRandomPuzzle());
     setFoundUnlimited(new Set());
+    setHintLettersUsed(0);
+    setHintWordsUsed(0);
+    setRevealedCell(null);
   };
 
   const handleUnlock = () => {
@@ -197,6 +253,11 @@ export const GamePage: React.FC = () => {
               {formatTime(timerMs)}
             </div>
           )}
+          {!locked && mode === "daily" && save.bestDailyTimeMsByDifficulty[dailyDifficulty] !== null && (
+            <div className="text-xs text-muted font-mono" title={`Best ${DIFFICULTY_LABELS[dailyDifficulty]} time`}>
+              Best {formatTime(save.bestDailyTimeMsByDifficulty[dailyDifficulty]!)}
+            </div>
+          )}
           {save.streak > 0 && (
             <div className="flex items-center gap-1.5 text-sm text-present font-mono">
               <Flame className="w-4 h-4" />
@@ -243,6 +304,23 @@ export const GamePage: React.FC = () => {
         </button>
       </div>
 
+      {mode === "daily" && (
+        <div className="flex items-center gap-1 p-1 bg-surface border border-rule rounded-lg">
+          {DAILY_DIFFICULTIES.map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => handleSelectDailyDifficulty(d)}
+              className={`px-3.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                dailyDifficulty === d ? "bg-present text-ink" : "text-muted hover:text-paper"
+              }`}
+            >
+              {DIFFICULTY_LABELS[d]}
+            </button>
+          ))}
+        </div>
+      )}
+
       {locked ? (
         <div className="w-full max-w-sm bg-surface border border-rule rounded-xl p-6 text-center space-y-4 mt-6">
           <div className="w-12 h-12 rounded-full bg-present-soft border border-present-dim/50 flex items-center justify-center text-present mx-auto">
@@ -276,9 +354,31 @@ export const GamePage: React.FC = () => {
           </div>
 
           <div className="w-full max-w-3xl flex flex-col sm:flex-row items-start justify-center gap-5">
-            <Grid puzzle={active.puzzle} foundWords={found} onWordFound={handleWordFound} />
-            <div className="w-full sm:w-44 shrink-0">
+            <Grid puzzle={active.puzzle} foundWords={found} onWordFound={handleWordFound} revealedCell={revealedCell} />
+            <div className="w-full sm:w-44 shrink-0 space-y-3">
               <WordList words={active.puzzle.words} found={found} />
+              {!isComplete && (
+                <div className="flex flex-col gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleRevealLetter}
+                    disabled={hintLettersUsed >= HINT_LETTER_LIMIT}
+                    className="flex items-center gap-1.5 text-xs text-muted hover:text-paper disabled:opacity-40 disabled:hover:text-muted transition-colors"
+                  >
+                    <Lightbulb className="w-3.5 h-3.5" />
+                    Reveal letter ({HINT_LETTER_LIMIT - hintLettersUsed} left)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRevealWord}
+                    disabled={hintWordsUsed >= HINT_WORD_LIMIT}
+                    className="flex items-center gap-1.5 text-xs text-muted hover:text-paper disabled:opacity-40 disabled:hover:text-muted transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    Reveal word ({HINT_WORD_LIMIT - hintWordsUsed} left)
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -293,7 +393,9 @@ export const GamePage: React.FC = () => {
             </button>
           )}
 
-          {mode === "daily" && <Leaderboard date={daily.date} currentPlayerId={userId} refreshKey={leaderboardKey} />}
+          {mode === "daily" && (
+            <Leaderboard date={daily.date} difficulty={dailyDifficulty} currentPlayerId={userId} refreshKey={leaderboardKey} />
+          )}
         </>
       )}
     </div>

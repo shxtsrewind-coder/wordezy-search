@@ -112,6 +112,24 @@
   .cell:hover { background: var(--surface-high); }
   .cell.selected { background: var(--present); color: var(--ink); }
   .cell.found { background: var(--correct); color: var(--paper); }
+  .cell.revealed { background: var(--present-soft); color: var(--present); box-shadow: 0 0 0 2px var(--present); animation: cell-pulse 0.8s ease-in-out infinite; }
+  @keyframes cell-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+  .difficulty-tabs { display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
+  .difficulty-btn {
+    padding: 5px 14px; border-radius: 7px; border: none; background: none;
+    font-family: var(--font-body); font-size: 12.5px; font-weight: 500;
+    color: var(--muted); cursor: pointer; transition: background-color .15s, color .15s;
+  }
+  .difficulty-btn.active { background: var(--present); color: var(--ink); }
+  .difficulty-btn:not(.active):hover { color: var(--paper); }
+  .best-time { font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+  .hints { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .hint-btn {
+    display: flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 12px; font-family: var(--font-body); transition: color .15s; padding: 0;
+  }
+  .hint-btn:hover:not(:disabled) { color: var(--paper); }
+  .hint-btn:disabled { opacity: 0.4; cursor: default; }
   .word-rail { width: 100%; max-width: 180px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-content: start; }
   .word-chip {
     display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 7px;
@@ -235,7 +253,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
 
 <script type="text/babel" data-presets="react">
-const { useState, useCallback, useRef } = React;
+const { useState, useCallback, useRef, useMemo } = React;
 
 /* ---------------- rng.ts ---------------- */
 function hashSeed(str) {
@@ -365,8 +383,9 @@ function themeById(id) { return THEMES.find((t) => t.id === id) ?? THEMES[0]; }
 
 /* ---------------- lib/puzzleOfTheDay.ts ---------------- */
 const WORDS_PER_PUZZLE = 10;
-const DAILY_DIFFICULTY = "hard"; // the leaderboard-ranked puzzle is the same for everyone, and hard
 const GRID_SIZE_FLOOR = 11; // keeps the board the same size as the old 12-word puzzle
+const DAILY_DIFFICULTIES = ["easy", "classic", "hard"];
+const DEFAULT_DAILY_DIFFICULTY = "classic";
 function todayUtc() { return new Date().toISOString().slice(0, 10); }
 function pickWords(allWords, count, rng) {
   const pool = [...allWords];
@@ -377,13 +396,17 @@ function pickWords(allWords, count, rng) {
   }
   return chosen;
 }
-function getDailyPuzzle(date = todayUtc()) {
+// Theme + word list come from the date alone, so "today's puzzle" is the
+// same words on Easy, Normal and Hard — only the grid's size and diagonal
+// density change, same as picking a difficulty for the same day's puzzle on
+// sites like the Washington Post's word search.
+function getDailyPuzzle(date = todayUtc(), difficulty = DEFAULT_DAILY_DIFFICULTY) {
   const rng = makeRng(`daily:${date}`);
   const theme = THEMES[Math.floor(rng() * THEMES.length)];
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
-  const size = Math.max(sizeForWords(words, DAILY_DIFFICULTY), GRID_SIZE_FLOOR);
-  const puzzle = generatePuzzle(words, size, `daily:${date}`, DAILY_DIFFICULTY);
-  return { date, themeId: theme.id, themeLabel: theme.label, puzzle };
+  const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR);
+  const puzzle = generatePuzzle(words, size, `daily:${date}:${difficulty}`, difficulty);
+  return { date, difficulty, themeId: theme.id, themeLabel: theme.label, puzzle };
 }
 function getRandomPuzzle(themeId, difficulty = "hard") {
   const theme = themeId ? themeById(themeId) : THEMES[Math.floor(Math.random() * THEMES.length)];
@@ -392,7 +415,7 @@ function getRandomPuzzle(themeId, difficulty = "hard") {
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
   const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR);
   const puzzle = generatePuzzle(words, size, seed, difficulty);
-  return { date: seed, themeId: theme.id, themeLabel: theme.label, puzzle };
+  return { date: seed, difficulty, themeId: theme.id, themeLabel: theme.label, puzzle };
 }
 
 /* ---------------- lib/localSave.ts ---------------- */
@@ -402,41 +425,62 @@ const SAVE_DEFAULTS = {
   lastWinDate: null,
   unlockedUnlimited: false,
   displayName: null,
+  lastDailyDifficulty: "classic",
   totalDailyWins: 0,
-  bestDailyTimeMs: null,
+  bestDailyTimeMsByDifficulty: { easy: null, classic: null, hard: null },
   maxStreak: 0,
   themesCleared: [],
   unlockedAchievements: [],
 };
+function bestDailyTimeMsOverall(save) {
+  const times = Object.values(save.bestDailyTimeMsByDifficulty).filter((t) => t !== null);
+  return times.length ? Math.min(...times) : null;
+}
 const localSave = {
   get() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      if (raw) return { ...SAVE_DEFAULTS, ...JSON.parse(raw) };
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          ...SAVE_DEFAULTS,
+          ...parsed,
+          bestDailyTimeMsByDifficulty: { ...SAVE_DEFAULTS.bestDailyTimeMsByDifficulty, ...parsed.bestDailyTimeMsByDifficulty },
+        };
+      }
     } catch (e) {}
-    return { ...SAVE_DEFAULTS };
+    return { ...SAVE_DEFAULTS, bestDailyTimeMsByDifficulty: { ...SAVE_DEFAULTS.bestDailyTimeMsByDifficulty } };
   },
   set(save) {
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
     return save;
   },
-  recordDailyWin(date, themeId, timeMs) {
+  // Streak/total-wins count once per calendar day; a second difficulty
+  // played the same day still improves that difficulty's own best time.
+  recordDailyWin(date, difficulty, themeId, timeMs) {
     const save = this.get();
-    if (save.lastWinDate === date) return save;
-    const y = new Date(date + "T00:00:00Z");
-    y.setUTCDate(y.getUTCDate() - 1);
-    const yesterday = y.toISOString().slice(0, 10);
-    const streak = save.lastWinDate === yesterday ? save.streak + 1 : 1;
-    const themesCleared = save.themesCleared.includes(themeId) ? save.themesCleared : [...save.themesCleared, themeId];
-    return this.set({
-      ...save,
-      streak,
-      lastWinDate: date,
-      maxStreak: Math.max(save.maxStreak, streak),
-      totalDailyWins: save.totalDailyWins + 1,
-      bestDailyTimeMs: save.bestDailyTimeMs === null ? timeMs : Math.min(save.bestDailyTimeMs, timeMs),
-      themesCleared,
-    });
+    const bestForDifficulty = save.bestDailyTimeMsByDifficulty[difficulty];
+    save.bestDailyTimeMsByDifficulty = {
+      ...save.bestDailyTimeMsByDifficulty,
+      [difficulty]: bestForDifficulty === null ? timeMs : Math.min(bestForDifficulty, timeMs),
+    };
+    if (!save.themesCleared.includes(themeId)) save.themesCleared = [...save.themesCleared, themeId];
+    save.lastDailyDifficulty = difficulty;
+
+    if (save.lastWinDate !== date) {
+      const y = new Date(date + "T00:00:00Z");
+      y.setUTCDate(y.getUTCDate() - 1);
+      const yesterday = y.toISOString().slice(0, 10);
+      save.streak = save.lastWinDate === yesterday ? save.streak + 1 : 1;
+      save.lastWinDate = date;
+      save.maxStreak = Math.max(save.maxStreak, save.streak);
+      save.totalDailyWins += 1;
+    }
+    return this.set(save);
+  },
+  setLastDailyDifficulty(difficulty) {
+    const save = this.get();
+    return this.set({ ...save, lastDailyDifficulty: difficulty });
   },
   setUnlockedAchievements(ids) {
     const save = this.get();
@@ -460,8 +504,8 @@ const ACHIEVEMENTS = [
   { id: "streak_3", title: "On a Roll", description: "Reach a 3-day streak.", icon: "Flame", isUnlocked: (s) => s.maxStreak >= 3 },
   { id: "streak_7", title: "Week Streak", description: "Reach a 7-day streak.", icon: "Flame", isUnlocked: (s) => s.maxStreak >= 7 },
   { id: "streak_30", title: "Unstoppable", description: "Reach a 30-day streak.", icon: "Flame", isUnlocked: (s) => s.maxStreak >= 30 },
-  { id: "speed_90", title: "Speed Demon", description: "Solve a daily puzzle in under 90 seconds.", icon: "Gauge", isUnlocked: (s) => s.bestDailyTimeMs !== null && s.bestDailyTimeMs < 90000 },
-  { id: "speed_60", title: "Lightning Fast", description: "Solve a daily puzzle in under 60 seconds.", icon: "Zap", isUnlocked: (s) => s.bestDailyTimeMs !== null && s.bestDailyTimeMs < 60000 },
+  { id: "speed_90", title: "Speed Demon", description: "Solve a daily puzzle in under 90 seconds.", icon: "Gauge", isUnlocked: (s) => { const b = bestDailyTimeMsOverall(s); return b !== null && b < 90000; } },
+  { id: "speed_60", title: "Lightning Fast", description: "Solve a daily puzzle in under 60 seconds.", icon: "Zap", isUnlocked: (s) => { const b = bestDailyTimeMsOverall(s); return b !== null && b < 60000; } },
   { id: "explorer", title: "Explorer", description: "Solve a daily puzzle in every theme.", icon: "Compass", isUnlocked: (s, themeCount) => s.themesCleared.length >= themeCount },
   { id: "dedicated_25", title: "Dedicated", description: "Solve 25 daily puzzles.", icon: "Trophy", isUnlocked: (s) => s.totalDailyWins >= 25 },
 ];
@@ -489,6 +533,8 @@ const ZapIcon = (p) => <Icon {...p} path={<path d="M13 2 3 14h7l-1 8 10-12h-7z"/
 const CompassIcon = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="10"/><path d="M16 8l-2 6-6 2 2-6z"/></>} />;
 const AwardIcon = (p) => <Icon {...p} path={<><circle cx="12" cy="8" r="6"/><path d="M8.2 13.5 7 22l5-3 5 3-1.2-8.5"/></>} />;
 const CalendarIcon = (p) => <Icon {...p} path={<><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></>} />;
+const LightbulbIcon = (p) => <Icon {...p} path={<><path d="M9 18h6M10 22h4M15.09 14c.18-.98.65-1.74 1.41-2.5A6 6 0 1 0 6.5 11.5c.76.76 1.23 1.52 1.41 2.5"/></>} />;
+const EyeIcon = (p) => <Icon {...p} path={<><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></>} />;
 const ICONS = { Star: StarIcon, Flame: FlameIcon, Zap: ZapIcon, Gauge: GaugeIcon, Compass: CompassIcon, Trophy: TrophyIcon };
 
 /* ---------------- hooks/useTimer.ts ---------------- */
@@ -513,11 +559,11 @@ function useTimer(resetKey, running) {
 /* ---------------- components/Leaderboard.tsx ----------------
    Backed by this artifact's own shared `db` — a live, cross-viewer demo of
    the leaderboard. The real site (built from the Vite/React source) talks
-   to a Supabase table instead; same shape, different transport. Each day's
-   score is its own doc (keyed playerId_date) so an all-time tally can
-   aggregate wins and best time across every day a player has played, not
-   just overwrite their latest one. */
-function Leaderboard({ date, refreshKey }) {
+   to a Supabase table instead; same shape, different transport. Each player
+   has exactly one doc (scores/{self} — that's all this db's write rule
+   allows), so "today" is tracked per-difficulty inside that one doc
+   (timeMsByDifficulty) and reset whenever a new date rolls in. */
+function Leaderboard({ date, difficulty, refreshKey }) {
   const [tab, setTab] = useState("today");
   const [todayEntries, setTodayEntries] = useState(null);
   const [allTimeEntries, setAllTimeEntries] = useState(null);
@@ -526,6 +572,7 @@ function Leaderboard({ date, refreshKey }) {
 
   React.useEffect(() => {
     let cancelled = false;
+    setTodayEntries(null);
     (async () => {
       if (!window.claude?.use) { setAvailable(false); return; }
       const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
@@ -534,14 +581,20 @@ function Leaderboard({ date, refreshKey }) {
       if (cancelled) return;
       setSelfId(id);
       try {
-        const snap = await db.collection("scores").where("date", "==", date).orderBy("timeMs", "asc").limit(10).get();
-        if (!cancelled) setTodayEntries(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        const snap = await db.collection("scores").where("date", "==", date).limit(100).get();
+        const rows = snap.docs
+          .map((d) => d.data())
+          .filter((row) => row.timeMsByDifficulty && row.timeMsByDifficulty[difficulty] != null)
+          .map((row) => ({ playerId: row.playerId, displayName: row.displayName, timeMs: row.timeMsByDifficulty[difficulty] }))
+          .sort((a, b) => a.timeMs - b.timeMs)
+          .slice(0, 10);
+        if (!cancelled) setTodayEntries(rows);
       } catch (e) {
         if (!cancelled) setAvailable(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [date, refreshKey]);
+  }, [date, difficulty, refreshKey]);
 
   React.useEffect(() => {
     if (tab !== "alltime" || allTimeEntries !== null || !available) return;
@@ -577,7 +630,7 @@ function Leaderboard({ date, refreshKey }) {
     <div className="leaderboard">
       <div className="leaderboard-tabs">
         <button type="button" className={`leaderboard-tab ${tab === "today" ? "active" : ""}`} onClick={() => setTab("today")}>
-          <TrophyIcon size={14} /> Today
+          <TrophyIcon size={14} /> Today · {difficulty === "classic" ? "Normal" : difficulty[0].toUpperCase() + difficulty.slice(1)}
         </button>
         <button type="button" className={`leaderboard-tab ${tab === "alltime" ? "active" : ""}`} onClick={() => setTab("alltime")}>
           <CalendarIcon size={14} /> All-Time
@@ -589,7 +642,7 @@ function Leaderboard({ date, refreshKey }) {
         ) : (
           <ol className="leaderboard-list">
             {todayEntries.map((e, i) => (
-              <li key={e.id} className={`leaderboard-row ${e.playerId === selfId ? "you" : ""}`}>
+              <li key={e.playerId} className={`leaderboard-row ${e.playerId === selfId ? "you" : ""}`}>
                 <span>{i + 1}. {e.displayName}{e.playerId === selfId ? " (you)" : ""}</span>
                 <span>{formatTime(e.timeMs)}</span>
               </li>
@@ -614,28 +667,38 @@ function Leaderboard({ date, refreshKey }) {
   );
 }
 
-async function submitDailyScore(date, displayName, timeMs) {
+async function submitDailyScore(date, difficulty, displayName, timeMs) {
   if (!window.claude?.use) return false;
   const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
   if (!db || !user) return false;
   const id = await user.id();
   if (!id) return false;
   const ref = db.doc("scores/" + id);
-  let prevWins = 0, prevBest = null, prevDate = null;
+  let prevWins = 0, prevBest = null, prevDate = null, prevTimes = {};
   try {
     const existing = await ref.get();
     const data = existing?.data?.();
-    if (data) { prevWins = data.totalWins ?? 0; prevBest = data.bestTimeMs ?? null; prevDate = data.date ?? null; }
+    if (data) {
+      prevWins = data.totalWins ?? 0;
+      prevBest = data.bestTimeMs ?? null;
+      prevDate = data.date ?? null;
+      prevTimes = data.timeMsByDifficulty ?? {};
+    }
   } catch (e) {}
   // Only bump the cumulative win count the first time a given date is
   // submitted — GamePage already guards against re-submitting mid-session,
-  // but this also covers a second visit on the same day.
+  // but this also covers a second visit on the same day. A new date wipes
+  // yesterday's per-difficulty times rather than letting a stale "today"
+  // entry for a difficulty the player skipped linger under the new date.
   const isNewDate = prevDate !== date;
+  const timeMsByDifficulty = isNewDate
+    ? { [difficulty]: timeMs }
+    : { ...prevTimes, [difficulty]: prevTimes[difficulty] == null ? timeMs : Math.min(prevTimes[difficulty], timeMs) };
   await ref.set({
     playerId: id,
     displayName,
     date,
-    timeMs,
+    timeMsByDifficulty,
     totalWins: isNewDate ? prevWins + 1 : prevWins,
     bestTimeMs: prevBest === null ? timeMs : Math.min(prevBest, timeMs),
     updatedAt: Date.now(),
@@ -651,7 +714,7 @@ function pathBetween(from, to) {
   for (let i = 0; i <= steps; i++) path.push({ row: from.row + dRow * i, col: from.col + dCol * i });
   return path;
 }
-function Grid({ puzzle, foundWords, onWordFound }) {
+function Grid({ puzzle, foundWords, onWordFound, revealedCell = null }) {
   const [anchor, setAnchor] = useState(null);
   const [selection, setSelection] = useState([]);
   const dragging = useRef(false);
@@ -698,6 +761,7 @@ function Grid({ puzzle, foundWords, onWordFound }) {
       {puzzle.grid.map((row, r) => row.map((letter, c) => {
         const key = `${r},${c}`;
         const isFound = foundCells.has(key), isSelected = selectedCells.has(key);
+        const isRevealed = revealedCell && revealedCell.row === r && revealedCell.col === c;
         return (
           <div
             key={key}
@@ -705,7 +769,7 @@ function Grid({ puzzle, foundWords, onWordFound }) {
             data-col={c}
             onMouseDown={() => handleStart({ row: r, col: c })}
             onTouchStart={() => handleStart({ row: r, col: c })}
-            className={`cell ${isFound ? "found" : isSelected ? "selected" : ""}`}
+            className={`cell ${isFound ? "found" : isSelected ? "selected" : isRevealed ? "revealed" : ""}`}
           >
             {letter}
           </div>
@@ -852,6 +916,9 @@ function WordmarkTiles() {
   );
 }
 const PLAY_CHOICE_KEY = "wordezySearch.playChoice";
+const DIFFICULTY_LABELS = { easy: "Easy", classic: "Normal", hard: "Hard" };
+const HINT_LETTER_LIMIT = 3;
+const HINT_WORD_LIMIT = 1;
 
 /* ---------------- components/ChoiceScreen.tsx ----------------
    Mandatory first-run screen (once per browser session): guest play, or a
@@ -919,7 +986,8 @@ function GamePage() {
   const [mode, setMode] = useState("daily");
   const [save, setSave] = useState(() => localSave.get());
   const [isGuest, setIsGuest] = useState(true);
-  const [daily] = useState(() => getDailyPuzzle());
+  const [dailyDifficulty, setDailyDifficulty] = useState(() => localSave.get().lastDailyDifficulty);
+  const daily = useMemo(() => getDailyPuzzle(todayUtc(), dailyDifficulty), [dailyDifficulty]);
   const [unlimited, setUnlimited] = useState(() => getRandomPuzzle());
   const [foundDaily, setFoundDaily] = useState(() => new Set());
   const [foundUnlimited, setFoundUnlimited] = useState(() => new Set());
@@ -928,12 +996,24 @@ function GamePage() {
   const [showAchievements, setShowAchievements] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState(null);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [hintLettersUsed, setHintLettersUsed] = useState(0);
+  const [hintWordsUsed, setHintWordsUsed] = useState(0);
+  const [revealedCell, setRevealedCell] = useState(null);
+
+  // A different daily puzzle (new difficulty) resets progress and hints —
+  // each puzzle gets its own 3 letter reveals + 1 word reveal.
+  React.useEffect(() => {
+    setFoundDaily(new Set());
+    setHintLettersUsed(0);
+    setHintWordsUsed(0);
+    setRevealedCell(null);
+  }, [daily.date, daily.difficulty]);
 
   const active = mode === "daily" ? daily : unlimited;
   const found = mode === "daily" ? foundDaily : foundUnlimited;
   const setFound = mode === "daily" ? setFoundDaily : setFoundUnlimited;
   const isComplete = found.size === active.puzzle.words.length && active.puzzle.words.length > 0;
-  const timerMs = useTimer(`${mode}:${active.date}`, !isComplete && phase === "ready");
+  const timerMs = useTimer(`${mode}:${active.date}:${active.difficulty}`, !isComplete && phase === "ready");
 
   const handleChoiceResolved = (opts) => {
     try { sessionStorage.setItem(PLAY_CHOICE_KEY, "true"); } catch (e) {}
@@ -946,7 +1026,7 @@ function GamePage() {
     const next = new Set(found); next.add(word); setFound(next);
     if (mode === "daily" && next.size === daily.puzzle.words.length) {
       const prevUnlocked = save.unlockedAchievements;
-      const updated = localSave.recordDailyWin(todayUtc(), daily.themeId, timerMs);
+      const updated = localSave.recordDailyWin(todayUtc(), dailyDifficulty, daily.themeId, timerMs);
       setSave(updated);
 
       const newlyUnlockedIds = diffNewlyUnlocked(updated, THEMES.length, prevUnlocked);
@@ -959,14 +1039,44 @@ function GamePage() {
 
       if (!isGuest && save.displayName) {
         setScoreStatus("saving");
-        submitDailyScore(daily.date, save.displayName, timerMs)
+        submitDailyScore(daily.date, dailyDifficulty, save.displayName, timerMs)
           .then((ok) => { if (ok) { setScoreStatus("saved"); setLeaderboardKey((k) => k + 1); } else setScoreStatus("failed"); })
           .catch(() => setScoreStatus("failed"));
       }
     }
   };
 
-  const newUnlimitedPuzzle = () => { setUnlimited(getRandomPuzzle()); setFoundUnlimited(new Set()); };
+  const handleSelectDailyDifficulty = (difficulty) => {
+    if (difficulty === dailyDifficulty) return;
+    setDailyDifficulty(difficulty);
+    setSave(localSave.setLastDailyDifficulty(difficulty));
+    setScoreStatus("idle");
+  };
+
+  const handleRevealLetter = () => {
+    if (hintLettersUsed >= HINT_LETTER_LIMIT) return;
+    const target = active.puzzle.words.find((w) => !found.has(w.word));
+    if (!target) return;
+    setRevealedCell({ row: target.row, col: target.col });
+    setHintLettersUsed((n) => n + 1);
+    setTimeout(() => setRevealedCell(null), 1500);
+  };
+
+  const handleRevealWord = () => {
+    if (hintWordsUsed >= HINT_WORD_LIMIT) return;
+    const target = active.puzzle.words.find((w) => !found.has(w.word));
+    if (!target) return;
+    setHintWordsUsed((n) => n + 1);
+    handleWordFound(target.word);
+  };
+
+  const newUnlimitedPuzzle = () => {
+    setUnlimited(getRandomPuzzle());
+    setFoundUnlimited(new Set());
+    setHintLettersUsed(0);
+    setHintWordsUsed(0);
+    setRevealedCell(null);
+  };
   const handleUnlock = () => alert("Payments aren't set up yet — Classic Unlimited will unlock for $2 once that's wired in.");
   const locked = mode === "unlimited" && !save.unlockedUnlimited;
 
@@ -978,6 +1088,11 @@ function GamePage() {
         <div className="brand"><WordmarkTiles /><h1>Wordezy Search</h1></div>
         <div className="header-right">
           {!locked && <div className="timer"><TimerIcon size={16} />{formatTime(timerMs)}</div>}
+          {!locked && mode === "daily" && save.bestDailyTimeMsByDifficulty[dailyDifficulty] != null && (
+            <div className="best-time" title={`Best ${DIFFICULTY_LABELS[dailyDifficulty]} time`}>
+              Best {formatTime(save.bestDailyTimeMsByDifficulty[dailyDifficulty])}
+            </div>
+          )}
           {save.streak > 0 && <div className="streak"><FlameIcon size={16} />{save.streak}</div>}
           <button type="button" className="achievements-btn" onClick={() => setShowAchievements(true)} aria-label="Achievements">
             <AwardIcon size={16} />{save.unlockedAchievements.length}/{ACHIEVEMENTS.length}
@@ -998,6 +1113,21 @@ function GamePage() {
           Classic Unlimited
         </button>
       </div>
+
+      {mode === "daily" && (
+        <div className="difficulty-tabs">
+          {["easy", "classic", "hard"].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => handleSelectDailyDifficulty(d)}
+              className={`difficulty-btn ${dailyDifficulty === d ? "active" : ""}`}
+            >
+              {DIFFICULTY_LABELS[d]}
+            </button>
+          ))}
+        </div>
+      )}
 
       {locked ? (
         <div className="lock-card">
@@ -1021,15 +1151,27 @@ function GamePage() {
             )}
           </div>
           <div className="board-row">
-            <Grid puzzle={active.puzzle} foundWords={found} onWordFound={handleWordFound} />
-            <WordList words={active.puzzle.words} found={found} />
+            <Grid puzzle={active.puzzle} foundWords={found} onWordFound={handleWordFound} revealedCell={revealedCell} />
+            <div>
+              <WordList words={active.puzzle.words} found={found} />
+              {!isComplete && (
+                <div className="hints">
+                  <button type="button" className="hint-btn" onClick={handleRevealLetter} disabled={hintLettersUsed >= HINT_LETTER_LIMIT}>
+                    <LightbulbIcon size={14} /> Reveal letter ({HINT_LETTER_LIMIT - hintLettersUsed} left)
+                  </button>
+                  <button type="button" className="hint-btn" onClick={handleRevealWord} disabled={hintWordsUsed >= HINT_WORD_LIMIT}>
+                    <EyeIcon size={14} /> Reveal word ({HINT_WORD_LIMIT - hintWordsUsed} left)
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           {mode === "unlimited" && (
             <button type="button" onClick={newUnlimitedPuzzle} className="new-puzzle-btn">
               <RefreshIcon size={14} /> New puzzle
             </button>
           )}
-          {mode === "daily" && <Leaderboard date={daily.date} refreshKey={leaderboardKey} />}
+          {mode === "daily" && <Leaderboard date={daily.date} difficulty={dailyDifficulty} refreshKey={leaderboardKey} />}
         </>
       )}
     </div>
