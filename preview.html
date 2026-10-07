@@ -539,17 +539,16 @@ function Leaderboard({ date, refreshKey }) {
       const db = await window.claude.use("db");
       if (!db) return;
       try {
-        const snap = await db.collection("scores").orderBy("timeMs", "asc").limit(500).get();
-        const byPlayer = new Map();
-        for (const d of snap.docs) {
-          const row = d.data();
-          const existing = byPlayer.get(row.playerId) || { playerId: row.playerId, displayName: row.displayName, wins: 0, bestTimeMs: Infinity };
-          existing.wins += 1;
-          existing.bestTimeMs = Math.min(existing.bestTimeMs, row.timeMs);
-          existing.displayName = row.displayName;
-          byPlayer.set(row.playerId, existing);
-        }
-        const ranked = [...byPlayer.values()].sort((a, b) => b.wins - a.wins || a.bestTimeMs - b.bestTimeMs).slice(0, 10);
+        // Each player has exactly one doc (scores/{self}), carrying their
+        // cumulative totalWins/bestTimeMs alongside today's date/timeMs —
+        // the all-time tab reads those cumulative fields directly rather
+        // than aggregating per-day history (this demo keeps no such
+        // history; the real Supabase-backed site does).
+        const snap = await db.collection("scores").orderBy("totalWins", "desc").limit(10).get();
+        const ranked = snap.docs
+          .map((d) => d.data())
+          .filter((row) => (row.totalWins ?? 0) > 0)
+          .sort((a, b) => b.totalWins - a.totalWins || a.bestTimeMs - b.bestTimeMs);
         if (!cancelled) setAllTimeEntries(ranked);
       } catch (e) {
         if (!cancelled) setAllTimeEntries([]);
@@ -609,7 +608,26 @@ async function submitDailyScore(date, displayName, timeMs) {
   if (!db || !user) return false;
   const id = await user.id();
   if (!id) return false;
-  await db.doc(`scores/${id}_${date}`).set({ playerId: id, displayName, date, timeMs, updatedAt: Date.now() });
+  const ref = db.doc("scores/" + id);
+  let prevWins = 0, prevBest = null, prevDate = null;
+  try {
+    const existing = await ref.get();
+    const data = existing?.data?.();
+    if (data) { prevWins = data.totalWins ?? 0; prevBest = data.bestTimeMs ?? null; prevDate = data.date ?? null; }
+  } catch (e) {}
+  // Only bump the cumulative win count the first time a given date is
+  // submitted — GamePage already guards against re-submitting mid-session,
+  // but this also covers a second visit on the same day.
+  const isNewDate = prevDate !== date;
+  await ref.set({
+    playerId: id,
+    displayName,
+    date,
+    timeMs,
+    totalWins: isNewDate ? prevWins + 1 : prevWins,
+    bestTimeMs: prevBest === null ? timeMs : Math.min(prevBest, timeMs),
+    updatedAt: Date.now(),
+  });
   return true;
 }
 
