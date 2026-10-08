@@ -168,7 +168,7 @@ export const GamePage: React.FC = () => {
       // reject them anyway — skip the call rather than show a failure.
       if (!isAnonymous) {
         setScoreStatus("saving");
-        submitScore({ puzzleDate: daily.date, difficulty: daily.difficulty, timeMs })
+        submitScore({ puzzleDate: daily.date, difficulty: daily.difficulty, timeMs: timerMs })
           .then(() => {
             setScoreStatus("saved");
             setLeaderboardKey((k) => k + 1);
