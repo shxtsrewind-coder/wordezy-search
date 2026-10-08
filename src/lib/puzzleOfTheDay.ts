@@ -2,11 +2,16 @@ import { THEMES } from "../data/wordbank.ts";
 import { makeRng } from "./rng.ts";
 import { generatePuzzle, sizeForWords, type Puzzle, type Difficulty } from "./wordsearch.ts";
 
-const WORDS_PER_PUZZLE = 10;
-// Dropping from 12 to 10 words would otherwise shrink the grid (size scales
-// with total letter count) — this floor keeps the board the same size as
-// before, just a little less crowded.
+const WORDS_PER_PUZZLE = 24;
+// Grid size scales with total letter count (see sizeForWords), so this is
+// just a floor for small/short-word lists — at 24 words it's well below
+// what sizeForWords actually returns.
 const GRID_SIZE_FLOOR = 11;
+// A list this long occasionally leaves one word unable to find a spot in a
+// tightly-sized grid (same risk any word search generator has, just more
+// likely with more words competing for the same cells) — a little extra
+// headroom on top of sizeForWords' own sizing keeps that rare.
+const SIZE_HEADROOM = 2;
 // Daily is always the hardest setting — it's the one puzzle everyone is
 // racing on the same leaderboard, so there's no picking an easier board to
 // climb it. Difficulty choice lives in Classic Unlimited instead.
@@ -45,7 +50,7 @@ export function getDailyPuzzle(date: string = todayUtc()): DailyPuzzle {
   const rng = makeRng(`daily:${date}`);
   const theme = THEMES[Math.floor(rng() * THEMES.length)];
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
-  const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR);
+  const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR) + SIZE_HEADROOM;
   const puzzle = generatePuzzle(words, size, `daily:${date}:${difficulty}`, difficulty);
   return { date, difficulty, themeId: theme.id, themeLabel: theme.label, puzzle };
 }
@@ -60,7 +65,7 @@ export function getRandomPuzzle(themeId?: string, difficulty: Difficulty = "hard
   const seed = `random:${Date.now()}:${Math.random()}`;
   const rng = makeRng(seed);
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
-  const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR);
+  const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR) + SIZE_HEADROOM;
   const puzzle = generatePuzzle(words, size, seed, difficulty);
   return { date: seed, difficulty, themeId: theme.id, themeLabel: theme.label, puzzle };
 }

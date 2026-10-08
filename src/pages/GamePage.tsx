@@ -363,6 +363,12 @@ export const GamePage: React.FC = () => {
             )}
           </div>
 
+          {/* Shown right after a daily win, not while the puzzle is still in
+              progress — the board is the post-game moment, not scenery. */}
+          {mode === "daily" && isComplete && (
+            <Leaderboard date={daily.date} difficulty={daily.difficulty} currentPlayerId={userId} refreshKey={leaderboardKey} />
+          )}
+
           <div className="w-full max-w-3xl flex flex-col sm:flex-row items-start justify-center gap-5">
             <Grid puzzle={active.puzzle} foundWords={found} onWordFound={handleWordFound} revealedCell={revealedCell} />
             <div className="w-full sm:w-44 shrink-0 space-y-3">
@@ -401,10 +407,6 @@ export const GamePage: React.FC = () => {
               <RefreshCw className="w-3.5 h-3.5" />
               New puzzle
             </button>
-          )}
-
-          {mode === "daily" && (
-            <Leaderboard date={daily.date} difficulty={daily.difficulty} currentPlayerId={userId} refreshKey={leaderboardKey} />
           )}
         </>
       )}

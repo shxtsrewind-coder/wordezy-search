@@ -382,8 +382,11 @@ const THEMES = [
 function themeById(id) { return THEMES.find((t) => t.id === id) ?? THEMES[0]; }
 
 /* ---------------- lib/puzzleOfTheDay.ts ---------------- */
-const WORDS_PER_PUZZLE = 10;
-const GRID_SIZE_FLOOR = 11; // keeps the board the same size as the old 12-word puzzle
+const WORDS_PER_PUZZLE = 24;
+const GRID_SIZE_FLOOR = 11; // floor for small/short-word lists; sizeForWords usually exceeds it
+// A list this long occasionally leaves one word unable to find a spot in a
+// tightly-sized grid — a little extra headroom keeps that rare.
+const SIZE_HEADROOM = 2;
 const DIFFICULTIES = ["easy", "classic", "hard"];
 // Daily is always the hardest setting — one shared leaderboard, no picking
 // an easier board to climb it. Difficulty choice lives in Classic Unlimited.
@@ -405,7 +408,7 @@ function getDailyPuzzle(date = todayUtc()) {
   const rng = makeRng(`daily:${date}`);
   const theme = THEMES[Math.floor(rng() * THEMES.length)];
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
-  const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR);
+  const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR) + SIZE_HEADROOM;
   const puzzle = generatePuzzle(words, size, `daily:${date}:${difficulty}`, difficulty);
   return { date, difficulty, themeId: theme.id, themeLabel: theme.label, puzzle };
 }
@@ -414,7 +417,7 @@ function getRandomPuzzle(themeId, difficulty = "hard") {
   const seed = `random:${Date.now()}:${Math.random()}`;
   const rng = makeRng(seed);
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
-  const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR);
+  const size = Math.max(sizeForWords(words, difficulty), GRID_SIZE_FLOOR) + SIZE_HEADROOM;
   const puzzle = generatePuzzle(words, size, seed, difficulty);
   return { date: seed, difficulty, themeId: theme.id, themeLabel: theme.label, puzzle };
 }
@@ -1139,6 +1142,9 @@ function GamePage() {
               </p>
             )}
           </div>
+          {mode === "daily" && isComplete && (
+            <Leaderboard date={daily.date} difficulty={daily.difficulty} refreshKey={leaderboardKey} />
+          )}
           <div className="board-row">
             <Grid puzzle={active.puzzle} foundWords={found} onWordFound={handleWordFound} revealedCell={revealedCell} />
             <div>
@@ -1160,7 +1166,6 @@ function GamePage() {
               <RefreshIcon size={14} /> New puzzle
             </button>
           )}
-          {mode === "daily" && <Leaderboard date={daily.date} difficulty={daily.difficulty} refreshKey={leaderboardKey} />}
         </>
       )}
     </div>
