@@ -31,6 +31,8 @@ const DIRECTIONS: Array<[number, number]> = [...STRAIGHT_DIRECTIONS, ...DIAGONAL
 /** How hard the grid leans on diagonal/backward placements. */
 export type Difficulty = "easy" | "classic" | "hard";
 
+export const DIFFICULTIES: Difficulty[] = ["easy", "classic", "hard"];
+
 interface DifficultyTuning {
   /** How many copies of the diagonal directions go into the shuffle bag,
    *  per 1 copy of each straight direction — higher skews placement toward

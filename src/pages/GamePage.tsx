@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Lock, Sparkles, RefreshCw, Flame, Timer as TimerIcon, WifiOff, Award, Lightbulb, Eye } from "lucide-react";
 import { Grid } from "../components/Grid.tsx";
 import { WordList } from "../components/WordList.tsx";
@@ -7,7 +7,7 @@ import { AuthModal } from "../components/AuthModal.tsx";
 import { Confetti } from "../components/Confetti.tsx";
 import { AchievementToastStack } from "../components/AchievementToast.tsx";
 import { AchievementsModal } from "../components/AchievementsModal.tsx";
-import { getDailyPuzzle, getRandomPuzzle, todayUtc, DAILY_DIFFICULTIES } from "../lib/puzzleOfTheDay.ts";
+import { getDailyPuzzle, getRandomPuzzle, todayUtc } from "../lib/puzzleOfTheDay.ts";
 import { localSave } from "../lib/localSave.ts";
 import { submitScore } from "../lib/leaderboard.ts";
 import { supabase, ensureSession } from "../lib/supabase.ts";
@@ -15,6 +15,7 @@ import { useTimer, formatTime } from "../hooks/useTimer.ts";
 import { ACHIEVEMENTS, diffNewlyUnlocked, type Achievement } from "../data/achievements.ts";
 import { THEMES } from "../data/wordbank.ts";
 import type { Cell, Difficulty } from "../lib/wordsearch.ts";
+import { DIFFICULTIES } from "../lib/wordsearch.ts";
 
 type Mode = "daily" | "unlimited";
 type Phase = "auth_checking" | "choice" | "ready" | "auth_blocked";
@@ -58,9 +59,11 @@ export const GamePage: React.FC = () => {
 
   const [mode, setMode] = useState<Mode>("daily");
   const [save, setSave] = useState(() => localSave.get());
-  const [dailyDifficulty, setDailyDifficulty] = useState<Difficulty>(() => localSave.get().lastDailyDifficulty);
-  const daily = useMemo(() => getDailyPuzzle(todayUtc(), dailyDifficulty), [dailyDifficulty]);
-  const [unlimited, setUnlimited] = useState(() => getRandomPuzzle());
+  const [daily] = useState(() => getDailyPuzzle());
+  const [unlimitedDifficulty, setUnlimitedDifficulty] = useState<Difficulty>(
+    () => localSave.get().lastUnlimitedDifficulty
+  );
+  const [unlimited, setUnlimited] = useState(() => getRandomPuzzle(undefined, unlimitedDifficulty));
   const [foundDaily, setFoundDaily] = useState<Set<string>>(new Set());
   const [foundUnlimited, setFoundUnlimited] = useState<Set<string>>(new Set());
   const [leaderboardKey, setLeaderboardKey] = useState(0);
@@ -72,15 +75,26 @@ export const GamePage: React.FC = () => {
   const [hintWordsUsed, setHintWordsUsed] = useState(0);
   const [revealedCell, setRevealedCell] = useState<Cell | null>(null);
 
-  // A different daily puzzle (new difficulty, or Classic Unlimited dealing a
-  // fresh grid) resets progress and hint allowances — each puzzle gets its
-  // own 3 letter reveals + 1 word reveal, not a running total.
+  // A new daily puzzle resets its own progress and hint allowances — each
+  // puzzle gets its own 3 letter reveals + 1 word reveal, not a running
+  // total. (There's only ever one daily puzzle per date, so this really
+  // only fires once per day; it's here for symmetry with Unlimited below.)
   useEffect(() => {
     setFoundDaily(new Set());
     setHintLettersUsed(0);
     setHintWordsUsed(0);
     setRevealedCell(null);
-  }, [daily.date, daily.difficulty]);
+  }, [daily.date]);
+
+  // Dealing a fresh Classic Unlimited grid (new puzzle, or new difficulty)
+  // resets that mode's own progress and hint allowances independently of
+  // Daily's, so switching tabs never spuriously burns a hint.
+  useEffect(() => {
+    setFoundUnlimited(new Set());
+    setHintLettersUsed(0);
+    setHintWordsUsed(0);
+    setRevealedCell(null);
+  }, [unlimited.date]);
 
   const active = mode === "daily" ? daily : unlimited;
   const found = mode === "daily" ? foundDaily : foundUnlimited;
@@ -139,7 +153,7 @@ export const GamePage: React.FC = () => {
     setFound(next);
     if (mode === "daily" && next.size === daily.puzzle.words.length) {
       const prevUnlocked = save.unlockedAchievements;
-      const updated = localSave.recordDailyWin(todayUtc(), dailyDifficulty, daily.themeId, timerMs);
+      const updated = localSave.recordDailyWin(todayUtc(), daily.themeId, timerMs);
       setSave(updated);
 
       const newlyUnlockedIds = diffNewlyUnlocked(updated, THEMES.length, prevUnlocked);
@@ -154,7 +168,7 @@ export const GamePage: React.FC = () => {
       // reject them anyway — skip the call rather than show a failure.
       if (!isAnonymous) {
         setScoreStatus("saving");
-        submitScore({ puzzleDate: daily.date, difficulty: dailyDifficulty, timeMs })
+        submitScore({ puzzleDate: daily.date, difficulty: daily.difficulty, timeMs })
           .then(() => {
             setScoreStatus("saved");
             setLeaderboardKey((k) => k + 1);
@@ -164,11 +178,11 @@ export const GamePage: React.FC = () => {
     }
   };
 
-  const handleSelectDailyDifficulty = (difficulty: Difficulty) => {
-    if (difficulty === dailyDifficulty) return;
-    setDailyDifficulty(difficulty);
-    setSave(localSave.setLastDailyDifficulty(difficulty));
-    setScoreStatus("idle");
+  const handleSelectUnlimitedDifficulty = (difficulty: Difficulty) => {
+    if (difficulty === unlimitedDifficulty) return;
+    setUnlimitedDifficulty(difficulty);
+    setSave(localSave.setLastUnlimitedDifficulty(difficulty));
+    setUnlimited(getRandomPuzzle(undefined, difficulty));
   };
 
   /** Flashes the first letter of an unfound word — doesn't mark anything
@@ -192,11 +206,7 @@ export const GamePage: React.FC = () => {
   };
 
   const newUnlimitedPuzzle = () => {
-    setUnlimited(getRandomPuzzle());
-    setFoundUnlimited(new Set());
-    setHintLettersUsed(0);
-    setHintWordsUsed(0);
-    setRevealedCell(null);
+    setUnlimited(getRandomPuzzle(undefined, unlimitedDifficulty));
   };
 
   const handleUnlock = () => {
@@ -253,9 +263,9 @@ export const GamePage: React.FC = () => {
               {formatTime(timerMs)}
             </div>
           )}
-          {!locked && mode === "daily" && save.bestDailyTimeMsByDifficulty[dailyDifficulty] !== null && (
-            <div className="text-xs text-muted font-mono" title={`Best ${DIFFICULTY_LABELS[dailyDifficulty]} time`}>
-              Best {formatTime(save.bestDailyTimeMsByDifficulty[dailyDifficulty]!)}
+          {!locked && mode === "daily" && save.bestDailyTimeMs !== null && (
+            <div className="text-xs text-muted font-mono" title="Best daily time">
+              Best {formatTime(save.bestDailyTimeMs)}
             </div>
           )}
           {save.streak > 0 && (
@@ -304,15 +314,15 @@ export const GamePage: React.FC = () => {
         </button>
       </div>
 
-      {mode === "daily" && (
+      {mode === "unlimited" && !locked && (
         <div className="flex items-center gap-1 p-1 bg-surface border border-rule rounded-lg">
-          {DAILY_DIFFICULTIES.map((d) => (
+          {DIFFICULTIES.map((d) => (
             <button
               key={d}
               type="button"
-              onClick={() => handleSelectDailyDifficulty(d)}
+              onClick={() => handleSelectUnlimitedDifficulty(d)}
               className={`px-3.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                dailyDifficulty === d ? "bg-present text-ink" : "text-muted hover:text-paper"
+                unlimitedDifficulty === d ? "bg-present text-ink" : "text-muted hover:text-paper"
               }`}
             >
               {DIFFICULTY_LABELS[d]}
@@ -394,7 +404,7 @@ export const GamePage: React.FC = () => {
           )}
 
           {mode === "daily" && (
-            <Leaderboard date={daily.date} difficulty={dailyDifficulty} currentPlayerId={userId} refreshKey={leaderboardKey} />
+            <Leaderboard date={daily.date} difficulty={daily.difficulty} currentPlayerId={userId} refreshKey={leaderboardKey} />
           )}
         </>
       )}

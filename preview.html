@@ -384,8 +384,10 @@ function themeById(id) { return THEMES.find((t) => t.id === id) ?? THEMES[0]; }
 /* ---------------- lib/puzzleOfTheDay.ts ---------------- */
 const WORDS_PER_PUZZLE = 10;
 const GRID_SIZE_FLOOR = 11; // keeps the board the same size as the old 12-word puzzle
-const DAILY_DIFFICULTIES = ["easy", "classic", "hard"];
-const DEFAULT_DAILY_DIFFICULTY = "classic";
+const DIFFICULTIES = ["easy", "classic", "hard"];
+// Daily is always the hardest setting — one shared leaderboard, no picking
+// an easier board to climb it. Difficulty choice lives in Classic Unlimited.
+const DAILY_DIFFICULTY = "hard";
 function todayUtc() { return new Date().toISOString().slice(0, 10); }
 function pickWords(allWords, count, rng) {
   const pool = [...allWords];
@@ -396,11 +398,10 @@ function pickWords(allWords, count, rng) {
   }
   return chosen;
 }
-// Theme + word list come from the date alone, so "today's puzzle" is the
-// same words on Easy, Normal and Hard — only the grid's size and diagonal
-// density change, same as picking a difficulty for the same day's puzzle on
-// sites like the Washington Post's word search.
-function getDailyPuzzle(date = todayUtc(), difficulty = DEFAULT_DAILY_DIFFICULTY) {
+// Theme + word list come from the date alone. Always generated on Hard,
+// since the daily leaderboard is one shared ranking, not one per difficulty.
+function getDailyPuzzle(date = todayUtc()) {
+  const difficulty = DAILY_DIFFICULTY;
   const rng = makeRng(`daily:${date}`);
   const theme = THEMES[Math.floor(rng() * THEMES.length)];
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);
@@ -425,47 +426,30 @@ const SAVE_DEFAULTS = {
   lastWinDate: null,
   unlockedUnlimited: false,
   displayName: null,
-  lastDailyDifficulty: "classic",
+  lastUnlimitedDifficulty: "hard",
   totalDailyWins: 0,
-  bestDailyTimeMsByDifficulty: { easy: null, classic: null, hard: null },
+  bestDailyTimeMs: null,
   maxStreak: 0,
   themesCleared: [],
   unlockedAchievements: [],
 };
-function bestDailyTimeMsOverall(save) {
-  const times = Object.values(save.bestDailyTimeMsByDifficulty).filter((t) => t !== null);
-  return times.length ? Math.min(...times) : null;
-}
 const localSave = {
   get() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        return {
-          ...SAVE_DEFAULTS,
-          ...parsed,
-          bestDailyTimeMsByDifficulty: { ...SAVE_DEFAULTS.bestDailyTimeMsByDifficulty, ...parsed.bestDailyTimeMsByDifficulty },
-        };
-      }
+      if (raw) return { ...SAVE_DEFAULTS, ...JSON.parse(raw) };
     } catch (e) {}
-    return { ...SAVE_DEFAULTS, bestDailyTimeMsByDifficulty: { ...SAVE_DEFAULTS.bestDailyTimeMsByDifficulty } };
+    return { ...SAVE_DEFAULTS };
   },
   set(save) {
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
     return save;
   },
-  // Streak/total-wins count once per calendar day; a second difficulty
-  // played the same day still improves that difficulty's own best time.
-  recordDailyWin(date, difficulty, themeId, timeMs) {
+  // Streak/total-wins count once per calendar day.
+  recordDailyWin(date, themeId, timeMs) {
     const save = this.get();
-    const bestForDifficulty = save.bestDailyTimeMsByDifficulty[difficulty];
-    save.bestDailyTimeMsByDifficulty = {
-      ...save.bestDailyTimeMsByDifficulty,
-      [difficulty]: bestForDifficulty === null ? timeMs : Math.min(bestForDifficulty, timeMs),
-    };
+    save.bestDailyTimeMs = save.bestDailyTimeMs === null ? timeMs : Math.min(save.bestDailyTimeMs, timeMs);
     if (!save.themesCleared.includes(themeId)) save.themesCleared = [...save.themesCleared, themeId];
-    save.lastDailyDifficulty = difficulty;
 
     if (save.lastWinDate !== date) {
       const y = new Date(date + "T00:00:00Z");
@@ -478,9 +462,9 @@ const localSave = {
     }
     return this.set(save);
   },
-  setLastDailyDifficulty(difficulty) {
+  setLastUnlimitedDifficulty(difficulty) {
     const save = this.get();
-    return this.set({ ...save, lastDailyDifficulty: difficulty });
+    return this.set({ ...save, lastUnlimitedDifficulty: difficulty });
   },
   setUnlockedAchievements(ids) {
     const save = this.get();
@@ -504,8 +488,8 @@ const ACHIEVEMENTS = [
   { id: "streak_3", title: "On a Roll", description: "Reach a 3-day streak.", icon: "Flame", isUnlocked: (s) => s.maxStreak >= 3 },
   { id: "streak_7", title: "Week Streak", description: "Reach a 7-day streak.", icon: "Flame", isUnlocked: (s) => s.maxStreak >= 7 },
   { id: "streak_30", title: "Unstoppable", description: "Reach a 30-day streak.", icon: "Flame", isUnlocked: (s) => s.maxStreak >= 30 },
-  { id: "speed_90", title: "Speed Demon", description: "Solve a daily puzzle in under 90 seconds.", icon: "Gauge", isUnlocked: (s) => { const b = bestDailyTimeMsOverall(s); return b !== null && b < 90000; } },
-  { id: "speed_60", title: "Lightning Fast", description: "Solve a daily puzzle in under 60 seconds.", icon: "Zap", isUnlocked: (s) => { const b = bestDailyTimeMsOverall(s); return b !== null && b < 60000; } },
+  { id: "speed_90", title: "Speed Demon", description: "Solve a daily puzzle in under 90 seconds.", icon: "Gauge", isUnlocked: (s) => s.bestDailyTimeMs !== null && s.bestDailyTimeMs < 90000 },
+  { id: "speed_60", title: "Lightning Fast", description: "Solve a daily puzzle in under 60 seconds.", icon: "Zap", isUnlocked: (s) => s.bestDailyTimeMs !== null && s.bestDailyTimeMs < 60000 },
   { id: "explorer", title: "Explorer", description: "Solve a daily puzzle in every theme.", icon: "Compass", isUnlocked: (s, themeCount) => s.themesCleared.length >= themeCount },
   { id: "dedicated_25", title: "Dedicated", description: "Solve 25 daily puzzles.", icon: "Trophy", isUnlocked: (s) => s.totalDailyWins >= 25 },
 ];
@@ -986,9 +970,9 @@ function GamePage() {
   const [mode, setMode] = useState("daily");
   const [save, setSave] = useState(() => localSave.get());
   const [isGuest, setIsGuest] = useState(true);
-  const [dailyDifficulty, setDailyDifficulty] = useState(() => localSave.get().lastDailyDifficulty);
-  const daily = useMemo(() => getDailyPuzzle(todayUtc(), dailyDifficulty), [dailyDifficulty]);
-  const [unlimited, setUnlimited] = useState(() => getRandomPuzzle());
+  const [daily] = useState(() => getDailyPuzzle());
+  const [unlimitedDifficulty, setUnlimitedDifficulty] = useState(() => localSave.get().lastUnlimitedDifficulty);
+  const [unlimited, setUnlimited] = useState(() => getRandomPuzzle(undefined, unlimitedDifficulty));
   const [foundDaily, setFoundDaily] = useState(() => new Set());
   const [foundUnlimited, setFoundUnlimited] = useState(() => new Set());
   const [leaderboardKey, setLeaderboardKey] = useState(0);
@@ -1000,14 +984,23 @@ function GamePage() {
   const [hintWordsUsed, setHintWordsUsed] = useState(0);
   const [revealedCell, setRevealedCell] = useState(null);
 
-  // A different daily puzzle (new difficulty) resets progress and hints —
-  // each puzzle gets its own 3 letter reveals + 1 word reveal.
+  // A new daily puzzle resets its own progress and hints — each puzzle gets
+  // its own 3 letter reveals + 1 word reveal.
   React.useEffect(() => {
     setFoundDaily(new Set());
     setHintLettersUsed(0);
     setHintWordsUsed(0);
     setRevealedCell(null);
-  }, [daily.date, daily.difficulty]);
+  }, [daily.date]);
+
+  // Dealing a fresh Classic Unlimited grid (new puzzle, or new difficulty)
+  // resets that mode's own progress and hints independently of Daily's.
+  React.useEffect(() => {
+    setFoundUnlimited(new Set());
+    setHintLettersUsed(0);
+    setHintWordsUsed(0);
+    setRevealedCell(null);
+  }, [unlimited.date]);
 
   const active = mode === "daily" ? daily : unlimited;
   const found = mode === "daily" ? foundDaily : foundUnlimited;
@@ -1026,7 +1019,7 @@ function GamePage() {
     const next = new Set(found); next.add(word); setFound(next);
     if (mode === "daily" && next.size === daily.puzzle.words.length) {
       const prevUnlocked = save.unlockedAchievements;
-      const updated = localSave.recordDailyWin(todayUtc(), dailyDifficulty, daily.themeId, timerMs);
+      const updated = localSave.recordDailyWin(todayUtc(), daily.themeId, timerMs);
       setSave(updated);
 
       const newlyUnlockedIds = diffNewlyUnlocked(updated, THEMES.length, prevUnlocked);
@@ -1039,18 +1032,18 @@ function GamePage() {
 
       if (!isGuest && save.displayName) {
         setScoreStatus("saving");
-        submitDailyScore(daily.date, dailyDifficulty, save.displayName, timerMs)
+        submitDailyScore(daily.date, daily.difficulty, save.displayName, timerMs)
           .then((ok) => { if (ok) { setScoreStatus("saved"); setLeaderboardKey((k) => k + 1); } else setScoreStatus("failed"); })
           .catch(() => setScoreStatus("failed"));
       }
     }
   };
 
-  const handleSelectDailyDifficulty = (difficulty) => {
-    if (difficulty === dailyDifficulty) return;
-    setDailyDifficulty(difficulty);
-    setSave(localSave.setLastDailyDifficulty(difficulty));
-    setScoreStatus("idle");
+  const handleSelectUnlimitedDifficulty = (difficulty) => {
+    if (difficulty === unlimitedDifficulty) return;
+    setUnlimitedDifficulty(difficulty);
+    setSave(localSave.setLastUnlimitedDifficulty(difficulty));
+    setUnlimited(getRandomPuzzle(undefined, difficulty));
   };
 
   const handleRevealLetter = () => {
@@ -1071,11 +1064,7 @@ function GamePage() {
   };
 
   const newUnlimitedPuzzle = () => {
-    setUnlimited(getRandomPuzzle());
-    setFoundUnlimited(new Set());
-    setHintLettersUsed(0);
-    setHintWordsUsed(0);
-    setRevealedCell(null);
+    setUnlimited(getRandomPuzzle(undefined, unlimitedDifficulty));
   };
   const handleUnlock = () => alert("Payments aren't set up yet — Classic Unlimited will unlock for $2 once that's wired in.");
   const locked = mode === "unlimited" && !save.unlockedUnlimited;
@@ -1088,9 +1077,9 @@ function GamePage() {
         <div className="brand"><WordmarkTiles /><h1>Wordezy Search</h1></div>
         <div className="header-right">
           {!locked && <div className="timer"><TimerIcon size={16} />{formatTime(timerMs)}</div>}
-          {!locked && mode === "daily" && save.bestDailyTimeMsByDifficulty[dailyDifficulty] != null && (
-            <div className="best-time" title={`Best ${DIFFICULTY_LABELS[dailyDifficulty]} time`}>
-              Best {formatTime(save.bestDailyTimeMsByDifficulty[dailyDifficulty])}
+          {!locked && mode === "daily" && save.bestDailyTimeMs != null && (
+            <div className="best-time" title="Best daily time">
+              Best {formatTime(save.bestDailyTimeMs)}
             </div>
           )}
           {save.streak > 0 && <div className="streak"><FlameIcon size={16} />{save.streak}</div>}
@@ -1114,14 +1103,14 @@ function GamePage() {
         </button>
       </div>
 
-      {mode === "daily" && (
+      {mode === "unlimited" && !locked && (
         <div className="difficulty-tabs">
-          {["easy", "classic", "hard"].map((d) => (
+          {DIFFICULTIES.map((d) => (
             <button
               key={d}
               type="button"
-              onClick={() => handleSelectDailyDifficulty(d)}
-              className={`difficulty-btn ${dailyDifficulty === d ? "active" : ""}`}
+              onClick={() => handleSelectUnlimitedDifficulty(d)}
+              className={`difficulty-btn ${unlimitedDifficulty === d ? "active" : ""}`}
             >
               {DIFFICULTY_LABELS[d]}
             </button>
@@ -1171,7 +1160,7 @@ function GamePage() {
               <RefreshIcon size={14} /> New puzzle
             </button>
           )}
-          {mode === "daily" && <Leaderboard date={daily.date} difficulty={dailyDifficulty} refreshKey={leaderboardKey} />}
+          {mode === "daily" && <Leaderboard date={daily.date} difficulty={daily.difficulty} refreshKey={leaderboardKey} />}
         </>
       )}
     </div>

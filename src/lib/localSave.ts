@@ -8,18 +8,16 @@ import type { Difficulty } from "./wordsearch.ts";
 
 const KEY = "wordezySearch.save.v1";
 
-export type BestTimesByDifficulty = Record<Difficulty, number | null>;
-
 export interface SaveData {
   lastSolvedDate: string | null;
   streak: number;
   unlockedUnlimited: boolean;
   displayName: string | null;
-  /** Remembers the player's last-picked daily difficulty across visits. */
-  lastDailyDifficulty: Difficulty;
+  /** Remembers the player's last-picked Classic Unlimited difficulty. */
+  lastUnlimitedDifficulty: Difficulty;
   /** Stats achievements.ts reads — see data/achievements.ts. */
   totalDailyWins: number;
-  bestDailyTimeMsByDifficulty: BestTimesByDifficulty;
+  bestDailyTimeMs: number | null;
   maxStreak: number;
   /** Theme ids solved at least once in daily mode. */
   themesCleared: string[];
@@ -31,9 +29,9 @@ const DEFAULTS: SaveData = {
   streak: 0,
   unlockedUnlimited: false,
   displayName: null,
-  lastDailyDifficulty: "classic",
+  lastUnlimitedDifficulty: "hard",
   totalDailyWins: 0,
-  bestDailyTimeMsByDifficulty: { easy: null, classic: null, hard: null },
+  bestDailyTimeMs: null,
   maxStreak: 0,
   themesCleared: [],
   unlockedAchievements: [],
@@ -42,15 +40,11 @@ const DEFAULTS: SaveData = {
 function read(): SaveData {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULTS, bestDailyTimeMsByDifficulty: { ...DEFAULTS.bestDailyTimeMsByDifficulty } };
+    if (!raw) return { ...DEFAULTS };
     const parsed = JSON.parse(raw);
-    return {
-      ...DEFAULTS,
-      ...parsed,
-      bestDailyTimeMsByDifficulty: { ...DEFAULTS.bestDailyTimeMsByDifficulty, ...parsed.bestDailyTimeMsByDifficulty },
-    };
+    return { ...DEFAULTS, ...parsed };
   } catch {
-    return { ...DEFAULTS, bestDailyTimeMsByDifficulty: { ...DEFAULTS.bestDailyTimeMsByDifficulty } };
+    return { ...DEFAULTS };
   }
 }
 
@@ -62,29 +56,15 @@ function write(data: SaveData): void {
   }
 }
 
-/** Fastest daily time across any difficulty — what the speed achievements
- *  (data/achievements.ts) check against. */
-export function bestDailyTimeMsOverall(save: SaveData): number | null {
-  const times = Object.values(save.bestDailyTimeMsByDifficulty).filter((t): t is number => t !== null);
-  return times.length ? Math.min(...times) : null;
-}
-
 export const localSave = {
   get: read,
 
-  /** Records a daily win's streak, stats, theme coverage, and per-difficulty
-   *  best time. The streak/total-wins count once per calendar day (picking
-   *  a second difficulty the same day still improves that difficulty's best
-   *  time, but isn't a second "win" for streak purposes). */
-  recordDailyWin(date: string, difficulty: Difficulty, themeId: string, timeMs: number): SaveData {
+  /** Records a daily win's streak, stats, theme coverage, and best time.
+   *  The streak/total-wins count once per calendar day. */
+  recordDailyWin(date: string, themeId: string, timeMs: number): SaveData {
     const data = read();
-    const bestForDifficulty = data.bestDailyTimeMsByDifficulty[difficulty];
-    data.bestDailyTimeMsByDifficulty = {
-      ...data.bestDailyTimeMsByDifficulty,
-      [difficulty]: bestForDifficulty === null ? timeMs : Math.min(bestForDifficulty, timeMs),
-    };
+    data.bestDailyTimeMs = data.bestDailyTimeMs === null ? timeMs : Math.min(data.bestDailyTimeMs, timeMs);
     if (!data.themesCleared.includes(themeId)) data.themesCleared = [...data.themesCleared, themeId];
-    data.lastDailyDifficulty = difficulty;
 
     if (data.lastSolvedDate !== date) {
       const yesterday = new Date(Date.parse(date + "T00:00:00Z") - 86400000).toISOString().slice(0, 10);
@@ -97,9 +77,10 @@ export const localSave = {
     return data;
   },
 
-  setLastDailyDifficulty(difficulty: Difficulty): SaveData {
+  /** Remembers the player's last-picked Classic Unlimited difficulty. */
+  setLastUnlimitedDifficulty(difficulty: Difficulty): SaveData {
     const data = read();
-    data.lastDailyDifficulty = difficulty;
+    data.lastUnlimitedDifficulty = difficulty;
     write(data);
     return data;
   },

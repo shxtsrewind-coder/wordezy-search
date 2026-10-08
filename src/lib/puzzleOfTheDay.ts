@@ -7,8 +7,10 @@ const WORDS_PER_PUZZLE = 10;
 // with total letter count) — this floor keeps the board the same size as
 // before, just a little less crowded.
 const GRID_SIZE_FLOOR = 11;
-export const DAILY_DIFFICULTIES: Difficulty[] = ["easy", "classic", "hard"];
-export const DEFAULT_DAILY_DIFFICULTY: Difficulty = "classic";
+// Daily is always the hardest setting — it's the one puzzle everyone is
+// racing on the same leaderboard, so there's no picking an easier board to
+// climb it. Difficulty choice lives in Classic Unlimited instead.
+const DAILY_DIFFICULTY: Difficulty = "hard";
 
 export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
@@ -33,15 +35,13 @@ export interface DailyPuzzle {
 }
 
 /**
- * One puzzle per UTC day, identical for every player at a given difficulty —
- * same idea as Wordezy's daily word: the date (+ difficulty) is the only
- * input, so there's nothing to fetch or agree on with a server. The theme
- * and word list are picked from the date alone, so "today's puzzle" is the
- * same words on Easy, Normal and Hard — only the grid's size and how much
- * it leans on diagonals changes, same as choosing a difficulty for the same
- * day's puzzle on sites like the Washington Post's word search.
+ * One puzzle per UTC day, identical for every player — same idea as
+ * Wordezy's daily word: the date is the only input, so there's nothing to
+ * fetch or agree on with a server. Always generated on Hard, since the
+ * daily leaderboard is one shared ranking rather than one per difficulty.
  */
-export function getDailyPuzzle(date: string = todayUtc(), difficulty: Difficulty = DEFAULT_DAILY_DIFFICULTY): DailyPuzzle {
+export function getDailyPuzzle(date: string = todayUtc()): DailyPuzzle {
+  const difficulty = DAILY_DIFFICULTY;
   const rng = makeRng(`daily:${date}`);
   const theme = THEMES[Math.floor(rng() * THEMES.length)];
   const words = pickWords(theme.words, WORDS_PER_PUZZLE, rng);

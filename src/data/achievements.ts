@@ -3,7 +3,7 @@
 // server record, so unlocking one doesn't require an account. A natural
 // next step if this needs to follow a player across devices: move
 // `unlockedAchievements` into the wordezy_search_profiles row instead.
-import { bestDailyTimeMsOverall, type SaveData } from "../lib/localSave.ts";
+import type { SaveData } from "../lib/localSave.ts";
 
 export interface Achievement {
   id: string;
@@ -50,20 +50,14 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: "Speed Demon",
     description: "Solve a daily puzzle in under 90 seconds.",
     icon: "Gauge",
-    isUnlocked: (s) => {
-      const best = bestDailyTimeMsOverall(s);
-      return best !== null && best < 90_000;
-    },
+    isUnlocked: (s) => s.bestDailyTimeMs !== null && s.bestDailyTimeMs < 90_000,
   },
   {
     id: "speed_60",
     title: "Lightning Fast",
     description: "Solve a daily puzzle in under 60 seconds.",
     icon: "Zap",
-    isUnlocked: (s) => {
-      const best = bestDailyTimeMsOverall(s);
-      return best !== null && best < 60_000;
-    },
+    isUnlocked: (s) => s.bestDailyTimeMs !== null && s.bestDailyTimeMs < 60_000,
   },
   {
     id: "explorer",
