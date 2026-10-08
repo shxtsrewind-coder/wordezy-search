@@ -1,0 +1,18 @@
+{
+  // Static-site deploy config for Cloudflare Workers (the current, unified
+  // replacement for "classic" Cloudflare Pages). There's no server-side
+  // Worker code here — this app is a built Vite SPA (dist/), and Workers'
+  // static-assets mode serves it directly with no backend of its own.
+  //
+  // Build step (run by Cloudflare before deploy): `npm run build` → dist/
+  // Deploy step: `npx wrangler deploy`
+  "name": "wordezy-search",
+  "compatibility_date": "2026-01-01",
+  "assets": {
+    "directory": "./dist",
+    // No client-side router here (just tab state), but harmless to keep —
+    // any path that isn't a real file in dist/ still falls back to
+    // index.html instead of 404.
+    "not_found_handling": "single-page-application"
+  }
+}
