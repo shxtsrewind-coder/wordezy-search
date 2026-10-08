@@ -3,14 +3,87 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+    <!-- Primary SEO -->
     <title>Wordezy Search — A Free Daily Word Search Puzzle</title>
     <meta
       name="description"
       content="Find every hidden word in today's grid. One new puzzle every day, shared by every player — plus a Classic Unlimited mode for endless play."
     />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://wordezysearch.bgameworld.com/" />
     <meta name="theme-color" content="#0b0a08" />
+    <meta name="author" content="bgameworld.com" />
+
+    <!-- Open Graph -->
+    <meta property="og:site_name" content="Wordezy Search" />
+    <meta property="og:title" content="Wordezy Search — A Free Daily Word Search Puzzle" />
+    <meta
+      property="og:description"
+      content="Find every hidden word in today's grid. One new themed puzzle every day, shared by every player."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://wordezysearch.bgameworld.com/" />
+    <meta property="og:image" content="https://wordezysearch.bgameworld.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Wordezy Search — SEARCH in jade and gold tiles, circled in a letter grid" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Wordezy Search — A Free Daily Word Search Puzzle" />
+    <meta
+      name="twitter:description"
+      content="Find every hidden word in today's grid. One new themed puzzle every day, shared by every player."
+    />
+    <meta name="twitter:image" content="https://wordezysearch.bgameworld.com/og-image.jpg" />
+    <meta name="twitter:image:alt" content="Wordezy Search — SEARCH in jade and gold tiles, circled in a letter grid" />
+
+    <!-- Icons & home-screen install -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Word Search" />
+    <meta name="application-name" content="Wordezy Search" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": "Wordezy Search",
+        "url": "https://wordezysearch.bgameworld.com/",
+        "image": "https://wordezysearch.bgameworld.com/og-image.jpg",
+        "description": "Find every hidden word in today's grid. One new themed puzzle every day, shared by every player — plus a Classic Unlimited mode for endless play.",
+        "genre": ["Puzzle", "Word Game", "Word Search"],
+        "gamePlatform": "Web browser",
+        "applicationCategory": "Game",
+        "operatingSystem": "Any (Web Browser)",
+        "inLanguage": "en",
+        "isAccessibleForFree": true,
+        "publisher": {
+          "@type": "Organization",
+          "name": "bgameworld.com",
+          "url": "https://bgameworld.com/"
+        },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://hkcvtoozpeybwehqtiif.supabase.co" crossorigin />
+    <link rel="dns-prefetch" href="https://hkcvtoozpeybwehqtiif.supabase.co" />
     <link
       href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
       rel="stylesheet"
@@ -21,6 +94,15 @@
   </head>
   <body class="bg-[#0b0a08] text-paper antialiased">
     <div id="root"></div>
+    <noscript>
+      <h1>Wordezy Search — a free daily word search puzzle</h1>
+      <p>
+        Every day there's a new themed grid with 24 hidden words to find, the same puzzle for every player. Drag across
+        the letters to circle each word, race the clock, and see how your time compares on the daily leaderboard. Classic
+        Unlimited adds endless puzzles across every theme. Wordezy Search needs JavaScript to play.
+      </p>
+      <p>More free games: <a href="https://wordezy.bgameworld.com/">Wordezy</a>, <a href="https://whenandwhere.bgameworld.com/">When &amp; Where</a>, <a href="https://bgameworld.com/">bgameworld.com</a>.</p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

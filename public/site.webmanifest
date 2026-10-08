@@ -1,0 +1,16 @@
+{
+  "name": "Wordezy Search — Daily Word Search Puzzle",
+  "short_name": "Word Search",
+  "description": "Find every hidden word in today's grid. One new puzzle every day, shared by every player — plus a Classic Unlimited mode for endless play.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0a08",
+  "theme_color": "#0b0a08",
+  "icons": [
+    { "src": "/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/android-chrome-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/maskable-icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
