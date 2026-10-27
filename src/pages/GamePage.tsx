@@ -237,7 +237,7 @@ export const GamePage: React.FC = () => {
         <button
           type="button"
           onClick={bootAuth}
-          className="px-4 py-2 rounded-md bg-correct hover:bg-correct-dim text-paper text-sm font-medium transition-colors"
+          className="px-4 py-2 rounded-md bg-correct hover:bg-correct-dim text-white text-sm font-medium transition-colors"
         >
           Retry
         </button>
@@ -297,7 +297,7 @@ export const GamePage: React.FC = () => {
           type="button"
           onClick={() => setMode("daily")}
           className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-            mode === "daily" ? "bg-correct text-paper" : "text-muted hover:text-paper"
+            mode === "daily" ? "bg-correct text-white" : "text-muted hover:text-white"
           }`}
         >
           Daily
@@ -306,7 +306,7 @@ export const GamePage: React.FC = () => {
           type="button"
           onClick={() => setMode("unlimited")}
           className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-            mode === "unlimited" ? "bg-correct text-paper" : "text-muted hover:text-paper"
+            mode === "unlimited" ? "bg-correct text-white" : "text-muted hover:text-white"
           }`}
         >
           {!save.unlockedUnlimited && <Lock className="w-3.5 h-3.5" />}
@@ -322,7 +322,7 @@ export const GamePage: React.FC = () => {
               type="button"
               onClick={() => handleSelectUnlimitedDifficulty(d)}
               className={`px-3.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                unlimitedDifficulty === d ? "bg-present text-ink" : "text-muted hover:text-paper"
+                unlimitedDifficulty === d ? "bg-present text-ink" : "text-muted hover:text-white"
               }`}
             >
               {DIFFICULTY_LABELS[d]}
@@ -345,7 +345,7 @@ export const GamePage: React.FC = () => {
           <button
             type="button"
             onClick={handleUnlock}
-            className="w-full py-2.5 px-4 rounded-md bg-correct hover:bg-correct-dim text-paper font-medium text-sm transition-colors"
+            className="w-full py-2.5 px-4 rounded-md bg-correct hover:bg-correct-dim text-white font-medium text-sm transition-colors"
           >
             Unlock for $2
           </button>

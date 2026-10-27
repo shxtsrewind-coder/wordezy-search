@@ -102,7 +102,7 @@ export const Grid: React.FC<GridProps> = ({ puzzle, foundWords, onWordFound, rev
               onMouseDown={() => handleStart({ row: r, col: c })}
               onTouchStart={() => handleStart({ row: r, col: c })}
               className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center font-mono font-semibold text-sm rounded-[4px] transition-colors cursor-pointer
-                ${isFound ? "bg-correct text-paper" : isSelected ? "bg-present text-ink" : isRevealed ? "bg-present-soft text-present ring-2 ring-present animate-pulse" : "bg-ink text-paper/80 hover:bg-surface-high"}`}
+                ${isFound ? "bg-correct text-white" : isSelected ? "bg-present text-ink" : isRevealed ? "bg-present-soft text-present ring-2 ring-present animate-pulse" : "bg-ink text-paper/80 hover:bg-surface-high"}`}
             >
               {letter}
             </div>
