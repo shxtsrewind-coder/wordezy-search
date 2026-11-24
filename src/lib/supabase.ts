@@ -1,7 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
+import { sharedAuthOptions } from "./sharedAuth";
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+// The shared bgameworld project. Its URL and publishable key are public by
+// design (they ship in every browser bundle; row-level security guards the
+// data), so they are the fallback when the build variables are missing.
+const url = ((import.meta.env.VITE_SUPABASE_URL as string | undefined) || '').trim() || 'https://hkcvtoozpeybwehqtiif.supabase.co';
+const anonKey = ((import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || '').trim() || 'sb_publishable_CGTFNipWN_1IeG28m4upSg_n2HSsGai';
 
 if (!url || !anonKey) {
   // Fails loudly in dev rather than silently shipping a client that can
@@ -12,7 +16,7 @@ if (!url || !anonKey) {
   );
 }
 
-export const supabase = createClient(url ?? "", anonKey ?? "");
+export const supabase = createClient(url ?? "", anonKey ?? "", { auth: sharedAuthOptions() });
 
 export interface SessionResult {
   ok: boolean;
