@@ -127,7 +127,7 @@ export const GamePage: React.FC = () => {
         if (profileRow?.display_name) setDisplayName(profileRow.display_name);
       }
 
-      const choiceDone = typeof window !== "undefined" && sessionStorage.getItem(PLAY_CHOICE_KEY) === "true";
+      const choiceDone = true; // BGameWorld asks new players once, for every game (bgameworld.com/account.js)
       setPhase(!anon || choiceDone ? "ready" : "choice");
     } catch (err) {
       console.error("Failed to establish session:", err);
@@ -166,6 +166,7 @@ export const GamePage: React.FC = () => {
 
       // Guests never created a wordezy_search_profiles row, so the RPC would
       // reject them anyway — skip the call rather than show a failure.
+      window.dispatchEvent(new CustomEvent("bgw:finished", { detail: { game: "wordsearch" } })); // BGameWorld: suggest next games
       if (!isAnonymous) {
         setScoreStatus("saving");
         submitScore({ puzzleDate: daily.date, difficulty: daily.difficulty, timeMs: timerMs })
