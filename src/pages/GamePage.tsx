@@ -411,6 +411,15 @@ export const GamePage: React.FC = () => {
           )}
         </>
       )}
+
+      {/* bgameworld.com/account.js draws a "more games" showcase here */}
+      <div className="w-full max-w-xl mt-auto pt-6">
+        <div data-bgw-more-games data-game="wordsearch">
+          <p className="text-center text-sm text-muted">
+            More free games on <a className="underline" href="https://bgameworld.com/">bgameworld.com</a>
+          </p>
+        </div>
+      </div>
     </div>
   );
 };
